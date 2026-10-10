@@ -1,7 +1,17 @@
 version: 2
+
+# Dependency bumps land as pull requests only. Merging one pushes to main,
+# which fires .github/workflows/deploy.yml and republishes the live site, so
+# keep the volume low and never auto-merge these.
 updates:
-- package-ecosystem: npm
-  directory: "/"
-  schedule:
-    interval: daily
-  open-pull-requests-limit: 20
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(deps)"
+    ignore:
+      # Hexo majors shuffle the renderer plugin API; bump these by hand.
+      - dependency-name: "hexo"
+        update-types: ["version-update:semver-major"]

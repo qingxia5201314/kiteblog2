@@ -1,0 +1,19 @@
+# Shell scripts must reach the server with LF endings.
+#
+# The checkout is edited on Windows and deployed to Linux. Git's autocrlf
+# converted operations/publish.sh to CRLF on the way in, and a CRLF shell script
+# fails at the first line with `set: pipefail: invalid option name` -- which
+# broke a deploy before this file existed.
+#
+# Explicit rules beat autocrlf, so these files keep LF in the repo and in every
+# working tree.
+*.sh text eol=lf
+
+# CI executes the workflow on Linux.
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# hexo-admin's bundle is a prebuilt artifact that ships CRLF, and
+# operations/patch-editor-bundle.js preserves whatever the file uses. Leave it
+# untouched so a `git checkout` gives back the exact bytes that were committed.
+operations/hexo-admin-bundle.js -text

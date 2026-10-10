@@ -1,0 +1,35 @@
+# --- Hexo blog ---
+blog/node_modules/
+blog/public/
+blog/db.json
+blog/.deploy*/
+blog/operations/cache/
+blog/operations/logs/
+blog/operations/test-artifacts/
+blog/operations/publish.lock
+blog/source/media/
+blog/themes/arknights/.git/
+blog/.DS_Store
+blog/Thumbs.db
+
+# --- Backend API ---
+server/node_modules/
+server/data/
+server/dist/
+server/dist-accounting/
+server/dist-files/
+server/uploads/
+server/.vite/
+server/.env
+server/.env.*
+!server/.env.example
+
+# --- misc ---
+*.log
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+*.tsbuildinfo
+.DS_Store
+Thumbs.db

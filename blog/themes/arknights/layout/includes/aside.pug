@@ -1,0 +1,77 @@
+aside
+  #about
+    a(href=config.root)#logo
+      img(src= asideLogo, alt= config.title || config.author || "Logo", style= {
+        margin: theme.aside.logo_margin,
+        'border-radius': theme.aside.logo_border_radius
+      })
+    h1#Dr
+      a(href= theme.aside.dr)= config.author
+    #description
+      p!= config.description
+    if theme.social
+      #social-links
+        each value, name in theme.social
+          - let icon = value.split('||')[1].trim(), src = value.split('||')[0].trim()
+          - const hasUriScheme = /^[a-z][a-z0-9+.-]*:/i.test(src)
+          - const isEmailAddress = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(src)
+          - if (!hasUriScheme && isEmailAddress) src = `mailto:${src}`
+          if icon.substring(0,2) === 'fa'
+            a.social(href= src)
+              i(alt= name,class= icon)
+          else
+            a.social.img(href= src)
+              img(alt= name,src= icon)
+  #aside-block
+    block aside-block
+    if page.title === undefined
+      section#total
+        a#total-archives(href= url_for("archives"))
+          span.total-title #{__('menu.archive.plural')} #{__('menu.total')}:
+          span.total-number= site.posts.length
+        #total-tags
+          span.total-title #{__('menu.tag.plural')}:
+          span.total-number= site.tags.length
+        #total-categories
+          span.total-title #{__('menu.category.plural')}:
+          span.total-number= site.categories.length
+        if theme.vercount.enable
+          br
+          #total-view
+            if theme.vercount.sitePV
+              span#vercount_container_site_pv(class='total-title') #{__('vercount.siteView')}
+                span#vercount_value_site_pv(class='total-number') #{__('vercount.loading')}
+              br
+            if theme.vercount.siteUV
+              span#vercount_container_site_uv(class='total-title') #{__('vercount.siteVisitor')}
+                span#vercount_value_site_uv(class='total-number') #{__('vercount.loading')}
+  footer(style= footerStyle)
+    if theme.aside.icp !== null
+      nobr
+        span.icp-title ICP
+        a(href='https://beian.miit.gov.cn/').icp-content= theme.aside.icp
+      br
+    if theme.aside.copyright !== null
+      each content, title in theme.aside.copyright
+        nobr
+          span.icp-title= title
+          if typeof content === 'string'
+            span.icp-content= content
+          else
+            each href, name in content
+              a(href=href).icp-content= name
+        br
+    nobr #{__('footer.publish')} 
+      a(href= 'http://hexo.io') Hexo
+    wbr
+    nobr  #{__('footer.theme')} 
+      a(href= 'https://github.com/Yue-plus/hexo-theme-arknights') Arknights
+    wbr
+    nobr  #{__('footer.by')} 
+      a(href= 'https://github.com/Yue-plus') Yue_plus
+    if config.build_time
+      wbr
+      nobr  #{__('footer.build_time')}
+        script.
+          const buildTime = new Date("#{config.build_time}");
+          document.write(' ' + buildTime.toLocaleString());

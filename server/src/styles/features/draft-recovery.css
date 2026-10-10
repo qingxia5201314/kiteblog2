@@ -1,0 +1,61 @@
+.draft-recovery-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(26 28 31 / 48%);
+  backdrop-filter: blur(5px);
+}
+
+.draft-recovery-dialog {
+  width: min(520px, 100%);
+  max-height: min(680px, calc(100dvh - 40px));
+  overflow: auto;
+  padding: 24px;
+  border: 1px solid rgb(206 64 62 / 28%);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 20px 52px rgb(35 30 30 / 24%);
+}
+
+.draft-recovery-dialog h2 {
+  margin: 4px 0 10px;
+  font-size: 1.25rem;
+}
+
+.draft-recovery-preview {
+  margin-top: 16px;
+  padding: 14px;
+  border-left: 3px solid #ce403e;
+  background: #fff5f4;
+}
+
+.draft-recovery-preview pre {
+  max-height: 240px;
+  overflow: auto;
+  margin: 10px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+}
+
+.draft-recovery-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+@media (max-width: 520px) {
+  .draft-recovery-dialog { padding: 18px; }
+  .draft-recovery-actions > button { flex: 1 1 120px; }
+}
+
+.editor-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

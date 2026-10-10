@@ -1,0 +1,106 @@
+.back-to-top {
+  align-items: center;
+  background: var(--sos-red, #c53b39);
+  border: 2px solid #2a1310;
+  bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 5px 5px 0 #2a1310;
+  color: #fffaf3;
+  cursor: pointer;
+  display: flex;
+  font-size: 0;
+  height: 48px;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  position: fixed;
+  right: max(22px, env(safe-area-inset-right, 0px));
+  transform: translateY(15px) rotate(3deg);
+  transition: opacity 240ms ease, transform 240ms var(--ease-out, ease);
+  width: 48px;
+  will-change: opacity, transform;
+  z-index: 19;
+}
+
+.back-to-top::before {
+  content: '↑';
+  font-size: 25px;
+  font-weight: 1000;
+  line-height: 1;
+  transition: transform 180ms var(--ease-spring, ease);
+}
+
+.back-to-top::after {
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid #2a1310;
+  bottom: -10px;
+  content: '';
+  position: absolute;
+  right: 4px;
+  transform: rotate(-24deg);
+  transition: transform 180ms var(--ease-spring, ease);
+}
+
+.back-to-top.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0) rotate(0);
+}
+
+.back-to-top.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(15px) rotate(3deg);
+}
+
+.back-to-top:hover {
+  transform: translate(-2px, -4px) rotate(-2deg);
+}
+
+.back-to-top:hover::before {
+  transform: translateY(-4px);
+}
+
+.back-to-top:hover::after {
+  transform: translate(3px, 2px) rotate(-5deg);
+}
+
+.back-to-top:active {
+  transform: translateY(1px) scale(0.95);
+}
+
+.back-to-top:focus-visible {
+  outline: 3px solid #fffaf3;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 6px var(--sos-red, #c53b39), 6px 6px 0 #2a1310;
+}
+
+@media (max-width: 620px) {
+  .back-to-top {
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    height: 44px;
+    right: max(14px, env(safe-area-inset-right, 0px));
+    width: 44px;
+  }
+}
+
+@media (max-width: 900px) {
+  .app-shell:has(.mobile-article-toc) .back-to-top {
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .back-to-top,
+  .back-to-top::before,
+  .back-to-top::after {
+    transition-duration: 0.01ms !important;
+  }
+
+  .back-to-top:hover,
+  .back-to-top:active,
+  .back-to-top:hover::before,
+  .back-to-top:hover::after {
+    transform: none;
+  }
+}

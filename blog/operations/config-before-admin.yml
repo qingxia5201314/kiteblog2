@@ -1,0 +1,15 @@
+title: Kitepop
+subtitle: ""
+description: ""
+author: Kitepop
+language: zh-CN
+url: https://kitepop.top
+root: /
+permalink: :year/:month/:day/:title/
+theme: arknights
+highlight:
+  hljs: true
+  line_number: true
+  auto_detect: true
+per_page: 10
+pagination_dir: page

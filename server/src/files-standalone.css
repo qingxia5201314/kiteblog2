@@ -1,0 +1,2 @@
+/* Standalone file hosting login must remain visible on narrow and embedded viewports. */
+.unlock-panel { max-width: 520px !important; width: min(520px, calc(100% - 24px)) !important; min-width: 280px !important; box-sizing: border-box !important; }

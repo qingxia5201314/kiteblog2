@@ -1,0 +1,33 @@
+/* Shared phone layout for admin, files, images, and accounting unlock forms. */
+@media (max-width: 720px) {
+  .unlock-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    box-sizing: border-box;
+    margin: clamp(28px, 9vh, 72px) auto;
+    max-width: 520px;
+    min-width: 0;
+    padding: 24px 18px;
+    width: calc(100% - 24px);
+  }
+
+  .unlock-panel h1 {
+    font-size: clamp(1.75rem, 8vw, 2.35rem);
+    line-height: 1.08;
+  }
+
+  .unlock-panel p {
+    line-height: 1.7;
+    max-width: 38rem;
+  }
+
+  .unlock-panel input,
+  .unlock-panel button {
+    box-sizing: border-box;
+    min-height: 48px;
+    min-width: 0;
+    width: 100%;
+  }
+}

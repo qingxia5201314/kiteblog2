@@ -1,0 +1,23 @@
+.editor-workflows { display: grid; gap: 14px; margin-top: 16px; }
+.editor-workflow-panel { padding: 16px; border: 1px solid rgb(45 48 52 / 14%); border-radius: 6px; background: #fbfbfa; }
+.workflow-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.workflow-title h3 { margin: 2px 0 0; font-size: 1rem; }
+.workflow-title > span { color: #6a6262; font-size: .85rem; }
+.revision-list { display: grid; gap: 8px; margin-top: 12px; }
+.revision-list article { padding: 12px; border: 1px solid rgb(45 48 52 / 12%); border-radius: 5px; background: #fff; }
+.revision-list article > div:first-child { display: flex; justify-content: space-between; gap: 12px; }
+.revision-list time, .revision-list p { color: #686163; font-size: .82rem; }
+.workflow-actions, .schedule-controls { display: flex; align-items: end; flex-wrap: wrap; gap: 8px; }
+.workflow-actions button, .schedule-controls button { min-height: 34px; }
+.workflow-actions .protected-revision-action {
+  border-color: #d8c7c5;
+  background: #f5efee;
+  color: #655b5a;
+  cursor: help;
+}
+.schedule-controls label { flex: 1 1 220px; }
+.workflow-error { color: #a42d2b; font-weight: 650; }
+.revision-diff { margin-top: 14px; padding-top: 14px; border-top: 1px solid rgb(45 48 52 / 14%); }
+.revision-diff-row { display: grid; grid-template-columns: 100px 1fr 1fr; gap: 8px; margin-top: 8px; }
+.revision-diff-row pre { max-height: 180px; overflow: auto; padding: 8px; white-space: pre-wrap; background: #fff; }
+@media (max-width: 700px) { .revision-diff-row { grid-template-columns: 1fr; } }

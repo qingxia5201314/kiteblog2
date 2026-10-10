@@ -1,0 +1,11 @@
+{
+  "include": ["./include/**/*.ts"],
+  "compilerOptions": {
+    "target": "ESNext",
+    "esModuleInterop": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "outFile": "../arknights.js",
+    "moduleResolution": "node"
+  }
+}

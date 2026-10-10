@@ -1,0 +1,23 @@
+@import './tokens.css';
+@import './base.css';
+@import './layout.css';
+@import './pages/admin.css';
+@import './pages/files.css';
+@import './pages/images.css';
+@import './pages/media.css';
+@import '../App.css';
+@import './pages/accounting.css';
+@import './features/mobile-unlock.css';
+@import './motion.css';
+@import './effects.css';
+@import './pages/home.css';
+@import './pages/article.css';
+@import './pages/about.css';
+@import './features/article-discovery.css';
+@import './features/mobile-article-toc.css';
+@import './features/draft-recovery.css';
+@import './features/editor-workflow.css';
+@import './features/back-to-top.css';
+/* Standalone file hosting must retain a usable login card at narrow/embedded viewport widths. */
+.files-page ~ .unlock-panel,
+body:has(.files-page) .unlock-panel { max-width: 520px; width: min(calc(100% - 24px), 520px); min-width: 280px; }

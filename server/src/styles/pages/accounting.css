@@ -1,0 +1,512 @@
+.ledger-filter-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.ledger-filter-grid label {
+  background: rgba(255, 253, 249, 0.72);
+  border: 1px solid rgba(216, 75, 73, 0.12);
+  border-radius: 12px;
+  display: grid;
+  font-weight: 850;
+  gap: 8px;
+  padding: 10px;
+}
+
+.custom-category-panel {
+  background: rgba(255, 244, 227, 0.72);
+  border: 1px solid rgba(216, 75, 73, 0.16);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.custom-category-panel[open] {
+  display: grid;
+  gap: 10px;
+}
+
+.custom-category-panel summary {
+  align-items: center;
+  cursor: pointer;
+  display: grid;
+  gap: 2px;
+  list-style: none;
+  padding-right: 26px;
+  position: relative;
+}
+
+.custom-category-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.custom-category-panel summary::after {
+  border: solid #c53b39;
+  border-width: 0 2px 2px 0;
+  content: '';
+  height: 8px;
+  position: absolute;
+  right: 4px;
+  top: 10px;
+  transform: rotate(45deg);
+  transition: transform 0.18s ease;
+  width: 8px;
+}
+
+.custom-category-panel[open] summary::after {
+  transform: rotate(225deg);
+}
+
+.custom-category-panel strong {
+  color: #231511;
+}
+
+.custom-category-panel small {
+  color: #68706a;
+}
+
+.custom-category-controls {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 140px auto;
+}
+
+.custom-category-controls input,
+.custom-category-controls select {
+  min-height: 42px;
+}
+
+.custom-category-list {
+  display: grid;
+  gap: 8px;
+}
+
+.custom-category-item {
+  align-items: center;
+  background: #fffdf9;
+  border: 1px solid rgba(42, 19, 15, 0.12);
+  border-radius: 10px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 110px auto auto;
+  padding: 8px;
+}
+
+.custom-category-item input,
+.custom-category-item select {
+  min-height: 38px;
+}
+
+/* Accounting workspace presentation overrides load after App.css. */
+.accounting-page {
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.accounting-page::before,
+.accounting-page::after {
+  border-radius: 50%;
+  content: '';
+  opacity: 0.34;
+  pointer-events: none;
+  position: absolute;
+  z-index: -1;
+}
+
+.accounting-page::before {
+  background: #d84b49;
+  box-shadow:
+    72px 48px 0 -3px rgba(216, 75, 73, 0.52),
+    176px 12px 0 -5px rgba(205, 166, 78, 0.62),
+    286px 74px 0 -4px rgba(52, 45, 39, 0.24);
+  height: 9px;
+  left: 5%;
+  top: 188px;
+  width: 9px;
+  animation: accounting-particle-drift 8s ease-in-out infinite alternate;
+}
+
+.accounting-page::after {
+  background: #cda64e;
+  bottom: 9%;
+  box-shadow:
+    -84px -22px 0 -4px rgba(216, 75, 73, 0.46),
+    -188px 36px 0 -3px rgba(205, 166, 78, 0.5),
+    -308px -14px 0 -5px rgba(52, 45, 39, 0.2);
+  height: 10px;
+  right: 7%;
+  width: 10px;
+  animation: accounting-particle-drift 10s ease-in-out -3s infinite alternate-reverse;
+}
+
+.accounting-mobile-tabs {
+  display: none;
+}
+
+.accounting-card,
+.metric-card,
+.accounting-hero {
+  position: relative;
+  z-index: 1;
+}
+
+.entry-item {
+  background:
+    linear-gradient(90deg, rgba(216, 75, 73, 0.055) 0 3px, transparent 3px),
+    rgba(255, 253, 249, 0.97);
+  border-color: rgba(67, 47, 40, 0.15);
+  border-radius: 12px;
+  box-shadow: 0 7px 18px rgba(55, 34, 27, 0.07);
+}
+
+.accounting-page .accounting-primary-action {
+  animation: none;
+  background: #d84b49;
+  border: 1px solid #a82f35;
+  border-radius: 0;
+  box-shadow: none;
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%);
+  color: #fff;
+  filter: drop-shadow(4px 5px 0 #7f2328);
+  font-weight: 850;
+  min-height: 40px;
+  overflow: hidden;
+  padding-inline: 22px;
+  position: relative;
+  transition: filter 90ms ease, transform 90ms ease, background 160ms ease;
+}
+
+.accounting-page .accounting-primary-action::after {
+  animation: accounting-button-glint 2.8s ease-in-out infinite;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.9), transparent);
+  content: '';
+  height: 180%;
+  left: -20%;
+  pointer-events: none;
+  position: absolute;
+  top: -40%;
+  transform: skewX(-18deg);
+  width: 34px;
+}
+
+.accounting-page .accounting-card .accounting-primary-action:hover {
+  background: #c73d3f;
+  box-shadow: none;
+  filter: drop-shadow(5px 6px 0 #7f2328);
+}
+
+.accounting-page .accounting-primary-action:active {
+  filter: drop-shadow(1px 2px 0 #7f2328);
+  transform: translate(3px, 3px);
+}
+
+.accounting-page .accounting-secondary-action {
+  background: #fffdf9;
+  border: 1px solid rgba(45, 35, 30, 0.42);
+  box-shadow: 3px 3px 0 rgba(45, 35, 30, 0.1);
+  clip-path: none;
+  color: #2d231e;
+  font-weight: 850;
+  min-height: 40px;
+}
+
+.accounting-page .accounting-secondary-action:hover {
+  background: #fff4e5;
+  border-color: #d84b49;
+  color: #9d2f34;
+}
+
+.entry-actions .entry-edit {
+  background: #fffdf9;
+  border: 1.5px solid #2d231e;
+  border-radius: 7px;
+  box-shadow: inset 4px 0 0 #cda64e;
+  clip-path: none;
+  color: #2d231e;
+  font-weight: 850;
+  min-height: 40px;
+  padding-left: 16px;
+}
+
+.entry-actions .entry-edit:hover {
+  background: #fff6df;
+  border-color: #2d231e;
+  color: #2d231e;
+}
+
+.entry-actions .danger {
+  background: transparent;
+  border: 1px solid #cf4143;
+  border-radius: 0;
+  box-shadow: 2px 2px 0 rgba(207, 65, 67, 0.12);
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 0 100%);
+  color: #a52e34;
+  font-weight: 850;
+  min-height: 40px;
+}
+
+.entry-actions .danger:hover {
+  background: #fff0ed;
+  border-color: #a52e34;
+  color: #8f222a;
+}
+
+.accounting-page .accounting-card .accounting-primary-action:focus-visible {
+  box-shadow:
+    inset 0 0 0 2px #fffdf9,
+    inset 0 0 0 5px #231511;
+  filter:
+    drop-shadow(4px 5px 0 #7f2328)
+    drop-shadow(0 0 5px rgba(216, 75, 73, 0.72));
+  outline: 3px solid #231511;
+  outline-offset: 3px;
+}
+
+.accounting-page .accounting-card .accounting-secondary-action:focus-visible {
+  outline: 3px solid #231511;
+  outline-offset: 3px;
+}
+
+.accounting-page .entry-actions .entry-edit:focus-visible {
+  outline: 3px solid #231511;
+  outline-offset: 3px;
+}
+
+.accounting-page .entry-actions .danger:focus-visible {
+  box-shadow:
+    inset 0 0 0 2px #fffdf9,
+    inset 0 0 0 4px #231511,
+    2px 2px 0 rgba(207, 65, 67, 0.12);
+  filter: drop-shadow(0 0 4px rgba(207, 65, 67, 0.62));
+  outline: 3px solid #231511;
+  outline-offset: 3px;
+}
+
+.accounting-page .accounting-card .accounting-primary-action:active:focus-visible {
+  filter:
+    drop-shadow(1px 2px 0 #7f2328)
+    drop-shadow(0 0 5px rgba(216, 75, 73, 0.72));
+  transform: translate(3px, 3px);
+}
+
+@keyframes accounting-button-glint {
+  0% { left: -20%; opacity: 0; transform: skewX(-18deg); }
+  8% { opacity: 1; }
+  68% { left: 115%; opacity: 1; transform: skewX(-18deg); }
+  76%, 100% { left: 115%; opacity: 0; transform: skewX(-18deg); }
+}
+
+@keyframes accounting-panel-enter {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes accounting-particle-drift {
+  from { opacity: 0.2; transform: translate3d(0, 0, 0) rotate(0deg); }
+  to { opacity: 0.5; transform: translate3d(13px, -18px, 0) rotate(18deg); }
+}
+
+@media (max-width: 720px) {
+  .accounting-page {
+    padding-bottom: 12px;
+  }
+
+  .accounting-hero {
+    align-items: center;
+    display: grid;
+    gap: 10px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 14px;
+  }
+
+  .accounting-hero h1 {
+    font-size: clamp(1.45rem, 6.5vw, 2rem);
+    line-height: 1.08;
+    margin-bottom: 0;
+  }
+
+  .accounting-hero > div > p:not(.eyebrow),
+  .accounting-hero-art {
+    display: none;
+  }
+
+  .accounting-actions {
+    align-items: stretch;
+    display: flex;
+    flex-direction: row;
+    gap: 7px;
+  }
+
+  .accounting-actions input {
+    min-height: 44px;
+    min-width: 0;
+    width: 136px;
+  }
+
+  .accounting-actions button {
+    min-height: 44px;
+    white-space: nowrap;
+  }
+
+  .accounting-mobile-tabs {
+    background: rgba(255, 253, 249, 0.96);
+    border: 1px solid rgba(216, 75, 73, 0.18);
+    box-shadow: 0 8px 20px rgba(57, 34, 27, 0.08);
+    display: grid;
+    gap: 0;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin-top: 12px;
+    overflow: hidden;
+    position: relative;
+    z-index: 2;
+  }
+
+  .accounting-mobile-tabs button {
+    background: transparent;
+    border: 0;
+    border-bottom: 3px solid transparent;
+    border-radius: 0;
+    color: #67554d;
+    min-height: 44px;
+    min-width: 0;
+    padding: 8px 4px 6px;
+  }
+
+  .accounting-mobile-tabs button[aria-pressed='true'] {
+    background: rgba(216, 75, 73, 0.07);
+    border-bottom-color: #d84b49;
+    color: #a52e34;
+  }
+
+  .accounting-mobile-tabs button:focus-visible {
+    box-shadow:
+      inset 0 0 0 3px #231511,
+      inset 0 0 0 5px #fffdf9;
+    outline: none;
+    position: relative;
+    z-index: 1;
+  }
+
+  .accounting-layout {
+    display: contents;
+  }
+
+  [data-accounting-panel] {
+    display: none;
+  }
+
+  [data-accounting-panel].is-mobile-active {
+    animation: accounting-panel-enter 380ms ease both;
+    display: grid;
+  }
+
+  .accounting-metrics,
+  .accounting-card {
+    margin-top: 12px;
+  }
+
+  .accounting-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .metric-card {
+    min-height: 104px;
+    padding: 12px;
+  }
+
+  .accounting-card {
+    border-radius: 13px;
+    padding: 13px;
+  }
+
+  .accounting-form .ledger-filter-grid,
+  .accounting-form .form-grid,
+  .saving-panel .form-grid {
+    gap: 9px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ledger-filter-grid label {
+    gap: 6px;
+    padding: 8px;
+  }
+
+  .custom-category-controls {
+    grid-template-columns: minmax(0, 1fr) minmax(104px, 0.65fr);
+  }
+
+  .custom-category-controls button {
+    grid-column: 1 / -1;
+  }
+
+  .custom-category-item {
+    grid-template-columns: minmax(0, 1fr) minmax(96px, 0.62fr);
+  }
+
+  .entry-item {
+    align-items: start;
+    gap: 8px 10px;
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+    padding: 12px 11px;
+  }
+
+  .entry-item > .money-expense,
+  .entry-item > .money-income {
+    grid-column: 3;
+    justify-self: end;
+  }
+
+  .entry-actions {
+    display: flex;
+    gap: 7px;
+    grid-column: 2 / -1;
+    justify-self: end;
+  }
+
+  .entry-actions button {
+    min-height: 40px;
+  }
+}
+
+@media (max-width: 380px) {
+  .accounting-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .accounting-actions input {
+    flex: 1;
+    width: auto;
+  }
+
+  .accounting-form .ledger-filter-grid,
+  .accounting-form .form-grid,
+  .saving-panel .form-grid,
+  .custom-category-controls,
+  .custom-category-item {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .custom-category-controls button {
+    grid-column: auto;
+  }
+
+  .accounting-metrics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .accounting-page::before,
+  .accounting-page::after {
+    animation: none;
+  }
+
+  .accounting-page .accounting-primary-action::after {
+    animation: none;
+    opacity: 0;
+  }
+
+  [data-accounting-panel].is-mobile-active {
+    animation: none;
+  }
+}

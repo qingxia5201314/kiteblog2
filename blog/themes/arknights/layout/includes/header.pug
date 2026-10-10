@@ -1,0 +1,51 @@
+mixin expand_list(list)
+  each url, label in list
+    - var match = null
+    if typeof(url) === "string" && url.match(config.archive_dir)
+      - match = config.category_dir + ',' + config.tag_dir
+    li.navItem(matchdata=match)
+      if typeof(url) === "object"
+        .navSecond
+          span.navItemTitle= label
+          ol.navItemList
+            +expand_list(url)
+      else
+        a.navSecond(href= url_for(url))
+          span.navItemTitle= label
+
+header.closed
+  .navBtn
+    i.navBtnIcon
+      span.navBtnIconBar
+      span.navBtnIconBar
+      span.navBtnIconBar
+  nav
+    if searchConfig !== null
+      .navItem#search-header
+        span.navItemTitle
+          input(autocomplete="off" autocorrect="off" autocapitalize="none"
+            placeholder=__('search.blurHolder') spellcheck="false" maxlength="50"
+            type="text" id="search-input")
+      .navItem#search-holder
+      .search-popup(tabindex="0")
+        #search-result
+    ol.navContent
+      - var finalMenu = {}
+      each url, label in theme.menu
+        - finalMenu[url_for(url)] = {url: url, label: label}
+      if config.menu
+        each url, label in config.menu
+          - finalMenu[url_for(url)] = {url: url, label: label}
+      each item in Object.values(finalMenu)
+        - var match = null
+        if typeof(item.url) === "string" && item.url.match(config.archive_dir)
+          - match = config.category_dir + ',' + config.tag_dir
+        li.navItem(matchdata=match)
+          if typeof(item.url) === "object"
+            .navBlock
+              span.navItemTitle= item.label
+              ol.navItemList
+                +expand_list(item.url)
+          else
+            a.navBlock(href= url_for(item.url))
+              span.navItemTitle= item.label

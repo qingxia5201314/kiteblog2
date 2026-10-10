@@ -13,9 +13,14 @@ name: Deploy blog
 #
 # Required repository secrets:
 #   VPS_SSH_KEY   private half of the gh-actions-deploy keypair (OpenSSH format)
-#   VPS_HOST      e.g. 104.225.238.193  (IP or hostname, no brackets)
-#   VPS_USER      e.g. root
+#   VPS_HOST      IP or hostname of the VPS, no brackets
+#   VPS_USER      SSH user, e.g. your deploy user
 #   VPS_PORT      optional, defaults to 22
+#
+# Content lives elsewhere: /opt/kitepop-hexo-standard/source is a symlink into
+# /opt/kitepop-content/source, a separate git repository on the VPS that this
+# workflow must never reset (see operations/migrate-content-split.sh). Only
+# code is synchronised here.
 
 on:
   push:
@@ -86,6 +91,32 @@ jobs:
           git reset --hard origin/main
           git submodule update --init --recursive
           git log --oneline -1
+          REMOTE
+          )
+          printf '%s\n' "$REMOTE" | $SSH "$VPS_USER@$VPS_HOST" bash -s
+
+      - name: Verify the content symlink survived the reset
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          set -euo pipefail
+          SSH="ssh -i $SSH_KEY_FILE -p $DEPLOY_PORT -o BatchMode=yes -o IdentitiesOnly=yes"
+          # `git reset --hard` above only touches the code repo, so the content
+          # symlink should still point at the content repo. If it does not, the
+          # render would publish an empty site -- stop here instead.
+          REMOTE=$(cat <<'REMOTE'
+          set -euo pipefail
+          cd /opt/kitepop-hexo-standard
+          if [ ! -e source ]; then
+            echo "content link missing after reset" >&2
+            exit 1
+          fi
+          test -L source
+          test -d source
+          test -n "$(ls -A source)"
+          printf 'content link ok: %s -> %s (%s files)\n' \
+            source "$(readlink source)" "$(find source/ -type f | wc -l)"
           REMOTE
           )
           printf '%s\n' "$REMOTE" | $SSH "$VPS_USER@$VPS_HOST" bash -s

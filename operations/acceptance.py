@@ -1,28 +1,106 @@
-import json, urllib.request, urllib.error, pathlib, ssl, base64, time
-root=pathlib.Path('/opt/kitepop-hexo-standard'); env=dict(l.split('=',1) for l in pathlib.Path('/etc/kitepop-blog.env').read_text().splitlines() if '=' in l)
-auth='Basic '+base64.b64encode(('admin:'+env['ADMIN_PASSWORD']).encode()).decode();ctx=ssl._create_unverified_context()
-def request(url,data=None,headers=None):
-    h={'User-Agent':'Mozilla/5.0','Authorization':auth};h.update(headers or {})
-    if data is not None:h['Content-Type']='application/json'
-    req=urllib.request.Request('https://kitepop.top'+url,data=None if data is None else json.dumps(data).encode(),headers=h)
+import json, re, urllib.request, urllib.error, pathlib, ssl, base64, time
+
+root = pathlib.Path('/opt/kitepop-hexo-standard')
+content = root / 'source'
+env = dict(l.split('=', 1) for l in pathlib.Path('/etc/kitepop-blog.env').read_text().splitlines() if '=' in l)
+auth = 'Basic ' + base64.b64encode(('admin:' + env['ADMIN_PASSWORD']).encode()).decode()
+ctx = ssl._create_unverified_context()
+
+# The fixture post is created by operations/verify-admin.py, which names it
+# migration-acceptance-<epoch>. Pass a different one with KITEPOP_ACCEPTANCE_POST.
+FIXTURE = __import__('os').environ.get('KITEPOP_ACCEPTANCE_POST', 'migration-acceptance-1700000000.md')
+
+
+def request(url, data=None, headers=None):
+    h = {'User-Agent': 'Mozilla/5.0', 'Authorization': auth}
+    h.update(headers or {})
+    if data is not None:
+        h['Content-Type'] = 'application/json'
+    req = urllib.request.Request(
+        'https://kitepop.top' + url,
+        data=None if data is None else json.dumps(data).encode(),
+        headers=h,
+    )
     try:
-        with urllib.request.urlopen(req,context=ctx,timeout=300) as r:return r.status,r.read()
-    except urllib.error.HTTPError as e:return e.code,e.read()
-def api(u,data=None):
-    c,b=request('/admin/api/'+u,data);assert c==200,(u,c,b[:120]);return json.loads(b)
-p=next(x for x in api('posts/list') if x['source']=='_drafts/migration-acceptance-1791472487.md');id=p['_id']
-x=api('posts/'+id);assert 'Saved via independent' in x['_content'];print('SAVE_REOPEN_OK')
-api('posts/'+id+'/publish',{});time.sleep(1);assert not api('posts/'+id)['isDraft'];print('PUBLISH_STATUS_OK')
-api('posts/'+id+'/unpublish',{});time.sleep(1);assert api('posts/'+id)['isDraft'];print('UNPUBLISH_STATUS_OK')
-assert request('/admin/api/posts/'+id,{'filename':'../../escape'})[0]==400;print('PATH_GUARD_OK')
-assert request('/admin/api/deploy',{'message':'test'},headers={'Origin':'https://evil.example'})[0]==403;print('CSRF_GUARD_OK')
-posts=api('posts/list');published=[x for x in posts if not x['isDraft']];assert len(published)==27
+        with urllib.request.urlopen(req, context=ctx, timeout=300) as r:
+            return r.status, r.read()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read()
+
+
+def api(u, data=None):
+    c, b = request('/admin/api/' + u, data)
+    assert c == 200, (u, c, b[:120])
+    return json.loads(b)
+
+
+# --- draft publish lifecycle -------------------------------------------------
+fixture = next((x for x in api('posts/list') if x['source'] == '_drafts/' + FIXTURE), None)
+assert fixture, 'fixture draft %s not found (run operations/verify-admin.py first)' % FIXTURE
+id = fixture['_id']
+x = api('posts/' + id)
+assert 'Saved via independent' in x['_content']
+print('SAVE_REOPEN_OK')
+api('posts/' + id + '/publish', {}); time.sleep(1)
+assert not api('posts/' + id)['isDraft']
+print('PUBLISH_STATUS_OK')
+api('posts/' + id + '/unpublish', {}); time.sleep(1)
+assert api('posts/' + id)['isDraft']
+print('UNPUBLISH_STATUS_OK')
+
+# --- guards ------------------------------------------------------------------
+assert request('/admin/api/posts/' + id, {'filename': '../../escape'})[0] == 400
+print('PATH_GUARD_OK')
+# Enforced by nginx (/etc/nginx/conf.d/myblog.conf), not by the app: 403 for any
+# Origin other than the site's own.
+assert request('/admin/api/deploy', {'message': 'test'}, headers={'Origin': 'https://evil.example'})[0] == 403
+print('CSRF_GUARD_OK')
+
+# --- every published page renders -------------------------------------------
+# Assert the pages that exist rather than a fixed count, which goes stale each
+# time a post is written.
+posts = api('posts/list')
+published = [x for x in posts if not x['isDraft']]
+assert published, 'no published posts found'
 for x in published:
-    p=x['path'];p=p.removeprefix('admin-preview/');c,b=request('/'+p);assert c==200,(p,c);assert x['title'].encode() in b,(p,'missing title')
-print('ALL_PUBLISHED_PAGES_OK',len(published))
-for u in json.loads(root.joinpath('operations/media-map.json').read_text()).values():assert request(u)[0]==200
-print('ALL_105_IMAGES_OK')
-pages=api('pages/list');assert any(x['source']=='about/index.md' for x in pages);print('ABOUT_ADMIN_OK')
-# Re-save unchanged About content through the backend, verifying persistence.
-about=next(x for x in pages if x['source']=='about/index.md');before=root.joinpath('source/about/index.md').read_text();api('pages/'+about['_id'],{'_content':about['_content']});time.sleep(1);assert about['_content'].strip() in root.joinpath('source/about/index.md').read_text();print('PAGE_EDIT_OK')
-x=api('deploy',{'message':'Final acceptance publish'});assert not x.get('error'),x;print('DEPLOY_OK')
+    p = x['path'].removeprefix('admin-preview/')
+    c, b = request('/' + p)
+    assert c == 200, (p, c)
+    assert x['title'].encode() in b, (p, 'missing title')
+print('ALL_PUBLISHED_PAGES_OK', len(published))
+
+# --- media -------------------------------------------------------------------
+# operations/migrate-media.cjs moved /api/images/raw/* references; a leftover
+# /api/files/raw/* one means a post still depends on the legacy Node app
+# (systemd kitepop-blog.service) staying alive to serve an image.
+legacy = [
+    str(f.relative_to(root))
+    for f in content.rglob('*.md')
+    if re.search(r'/api/(?:files|images)/raw/', f.read_text(encoding='utf-8'))
+]
+assert not legacy, 'posts still reference the legacy media API: ' + ', '.join(legacy)
+print('NO_LEGACY_MEDIA_REFS_OK')
+
+media = json.loads((root / 'operations/media-map.json').read_text())
+for u in media.values():
+    assert request(u)[0] == 200, (u,)
+print('ALL_MIGRATED_IMAGES_OK', len(media))
+
+for f in sorted((content / 'media/migrated').glob('file-*')):
+    c, _ = request('/media/migrated/' + f.name)
+    assert c == 200, (f.name, c)
+print('ALL_FILE_MIGRATED_IMAGES_OK')
+
+# --- about page round-trip ---------------------------------------------------
+pages = api('pages/list')
+about = next((x for x in pages if x['source'] == 'about/index.md'), None)
+assert about, 'about page not found in the admin page list'
+print('ABOUT_ADMIN_OK')
+api('pages/' + about['_id'], {'_content': about['_content']}); time.sleep(1)
+assert about['_content'].strip() in (content / 'about/index.md').read_text(encoding='utf-8')
+print('PAGE_EDIT_OK')
+
+# --- the deploy button -------------------------------------------------------
+x = api('deploy', {'message': 'Final acceptance publish'})
+assert not x.get('error'), x
+print('DEPLOY_OK')

@@ -28,10 +28,16 @@ Thumbs.db
 .idea/
 .vscode/
 
+# --- Content lives in its own repository ---------------------------------
+# On the VPS `source` is a symlink to /opt/kitepop-content/source, which is a
+# separate git repo the deploy pipeline never resets. Posts must not be tracked
+# here: this repo is public and CI runs `git reset --hard` on every deploy.
+# No trailing slash on purpose -- `/source/` only matches a real directory and
+# would leave the symlink showing up in `git status`.
+/source
+
 # --- local operational scratch -------------------------------------------
 .gitignore.bak-before-git-init
-source/_discarded/
-source/Untitled/
 
 # local safety copies produced during one-off repairs
 operations/*.bak-*

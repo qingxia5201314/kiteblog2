@@ -1,4 +1,4 @@
-import json, re, urllib.request, urllib.error, pathlib, ssl, base64, time
+import json, re, urllib.request, urllib.error, urllib.parse, pathlib, ssl, base64, time
 
 root = pathlib.Path('/opt/kitepop-hexo-standard')
 content = root / 'source'
@@ -6,12 +6,11 @@ env = dict(l.split('=', 1) for l in pathlib.Path('/etc/kitepop-blog.env').read_t
 auth = 'Basic ' + base64.b64encode(('admin:' + env['ADMIN_PASSWORD']).encode()).decode()
 ctx = ssl._create_unverified_context()
 
-# The fixture post is created by operations/verify-admin.py, which names it
-# migration-acceptance-<epoch>. Pass a different one with KITEPOP_ACCEPTANCE_POST.
-FIXTURE = __import__('os').environ.get('KITEPOP_ACCEPTANCE_POST', 'migration-acceptance-1700000000.md')
-
 
 def request(url, data=None, headers=None):
+    # Post permalinks contain Chinese characters; the request line must be
+    # ASCII, so percent-encode anything outside it.
+    url = urllib.parse.quote(url, safe="/?&=%:;,+@!$'()*[]~")
     h = {'User-Agent': 'Mozilla/5.0', 'Authorization': auth}
     h.update(headers or {})
     if data is not None:
@@ -34,10 +33,42 @@ def api(u, data=None):
     return json.loads(b)
 
 
+def wait_for_publish(timeout=300):
+    """Block until no async publish job is in flight.
+
+    publish/unpublish hand the rebuild to a background job, and publish.sh takes
+    an flock. Triggering another publish while one is running fails with
+    'Another publish is running', so wait before starting a new one.
+    """
+    deadline = time.time() + timeout
+    last = None
+    while time.time() < deadline:
+        last = api('publish-status')
+        if not last.get('running'):
+            return last
+        time.sleep(2)
+    raise AssertionError('publish job still running after %ss: %s' % (timeout, last))
+
+
 # --- draft publish lifecycle -------------------------------------------------
-fixture = next((x for x in api('posts/list') if x['source'] == '_drafts/' + FIXTURE), None)
-assert fixture, 'fixture draft %s not found (run operations/verify-admin.py first)' % FIXTURE
+# Pick whichever migration-acceptance fixture exists -- operations/verify-admin.py
+# creates a fresh one named after the epoch on every run, and older ones stay
+# behind. Assertions are written against the current state rather than assuming
+# a freshly created draft, because a previous run's deploy may have left its
+# fixture published.
+posts = api('posts/list')
+fixture = next((x for x in posts if x['source'].endswith('.md') and 'migration-acceptance-' in x['source']), None)
+assert fixture, 'no migration-acceptance fixture found (run operations/verify-admin.py first)'
 id = fixture['_id']
+print('FIXTURE', fixture['source'])
+
+# The fixture is a scratch post; only its own state is touched below, and it is
+# a draft again by the time this script finishes.
+if not fixture['isDraft']:
+    api('posts/' + id + '/unpublish', {}); time.sleep(1)
+x = api('posts/' + id)
+assert x['isDraft'], ('fixture did not become a draft', x['source'])
+
 x = api('posts/' + id)
 assert 'Saved via independent' in x['_content']
 print('SAVE_REOPEN_OK')
@@ -101,6 +132,11 @@ assert about['_content'].strip() in (content / 'about/index.md').read_text(encod
 print('PAGE_EDIT_OK')
 
 # --- the deploy button -------------------------------------------------------
+# Wait out any rebuild still running from the publish/unpublish above: they hand
+# the work to a background job, and publish.sh's flock means a second concurrent
+# publish fails by design.
+wait_for_publish()
 x = api('deploy', {'message': 'Final acceptance publish'})
 assert not x.get('error'), x
 print('DEPLOY_OK')
+wait_for_publish()

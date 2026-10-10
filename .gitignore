@@ -1,0 +1,34 @@
+# --- Hexo generated / runtime state ---------------------------------------
+db.json
+public/
+.deploy_git/
+.deploy*/
+_multiconfig.yml
+
+# --- Dependencies ----------------------------------------------------------
+node_modules/
+
+# --- Local build + tool caches (53 MB of npm cache lives here) -------------
+operations/cache/
+operations/logs/
+operations/test-artifacts/
+operations/publish.lock
+operations/withdrawn/
+operations/release.yml
+operations/config-before-admin.yml
+operations/hexo-admin-api.before-*.js
+
+# --- OS / editor noise -----------------------------------------------------
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.swp
+*~
+.idea/
+.vscode/
+
+# --- local operational scratch -------------------------------------------
+.gitignore.bak-before-git-init
+source/_discarded/
+source/Untitled/

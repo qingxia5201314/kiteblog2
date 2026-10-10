@@ -1,0 +1,11 @@
+const fs=require('fs'),path=require('path'),init=require('/opt/kitepop-blog/node_modules/sql.js'),yaml=require('js-yaml');
+init().then(SQL=>{const db=new SQL.Database(fs.readFileSync('/opt/kitepop-blog/data/blog.sqlite'));function rows(q){let r=db.exec(q)[0];return r?r.values.map(v=>Object.fromEntries(r.columns.map((k,i)=>[k,v[i]]))):[]}
+const dir='source/media/migrated';fs.mkdirSync(dir,{recursive:true});const map={};const ext={'image/png':'.png','image/jpeg':'.jpg','image/webp':'.webp','image/gif':'.gif','image/svg+xml':'.svg'};
+for(let i of rows('select * from hosted_images')){const f=i.id+(ext[i.content_type]||'.bin');fs.copyFileSync('/opt/kitepop-blog/data/images/'+i.storage_name,dir+'/'+f);map['/api/images/raw/'+i.id]='/media/migrated/'+f;}
+let replaced=0;function rewrite(s){for(const [a,b] of Object.entries(map)){for(const prefix of ['https://kitepop.top','http://kitepop.top','']){let x=prefix+a;if(s.includes(x)){s=s.split(x).join(b);replaced++}}}return s;}
+for(let d of ['source/_posts','source/_drafts','operations/withdrawn'])fs.mkdirSync(d,{recursive:true});
+for(let p of rows("select * from posts where status != 'published'")){const meta={title:p.title,date:p.created_at,updated:p.updated_at,categories:[p.category],tags:JSON.parse(p.tags_json),cover:p.cover_image||undefined};const raw='---\n'+yaml.dump(meta)+'---\n\n'+p.content+'\n';const d=p.status==='draft'?'source/_drafts':'operations/withdrawn';fs.writeFileSync(d+'/'+p.slug+'.md',rewrite(raw));}
+const profile=rows("select * from about_profile where profile_key='primary'")[0];if(profile){fs.writeFileSync('source/about/index.md','---\ntitle: 关于\n---\n\n'+rewrite('!['+profile.display_name+']('+profile.avatar_url+')\n\n# '+profile.display_name+'\n\n'+profile.intro+'\n\n'+profile.content+'\n\n[GitHub]('+profile.github_url+')\n'))}
+for(const d of ['source/_posts','source/_drafts'])for(const f of fs.readdirSync(d).filter(f=>f.endsWith('.md'))){const p=path.join(d,f);fs.writeFileSync(p,rewrite(fs.readFileSync(p,'utf8')))}
+console.log('Images copied='+Object.keys(map).length+' references rewritten='+replaced);fs.writeFileSync('operations/media-map.json',JSON.stringify(map,null,2));
+}).catch(e=>{console.error(e);process.exit(1)});

@@ -7,6 +7,10 @@ name: Deploy blog
 # which renders Hexo into a timestamped directory and atomically swaps the
 # /var/www/myblog-arknights symlink. No manual step is required.
 #
+# Every release is a fresh ~44 MB directory, so the job also prunes old
+# releases and source backups to keep a disk that is already ~80% full from
+# filling up.
+#
 # Required repository secrets:
 #   VPS_SSH_KEY   private half of the gh-actions-deploy keypair (OpenSSH format)
 #   VPS_HOST      e.g. 104.225.238.193  (IP or hostname, no brackets)
@@ -30,6 +34,12 @@ concurrency:
 
 permissions:
   contents: read
+
+env:
+  # Keep this release plus the newest few, so a bad deploy can still be
+  # rolled back by hand.
+  KEEP_RELEASES: "5"
+  KEEP_BACKUPS: "10"
 
 jobs:
   deploy:
@@ -69,12 +79,16 @@ jobs:
           set -euo pipefail
           : "${VPS_USER:?secret VPS_USER is not set}"
           SSH="ssh -i $SSH_KEY_FILE -p $DEPLOY_PORT -o BatchMode=yes -o IdentitiesOnly=yes"
-          $SSH "$VPS_USER@$VPS_HOST" 'set -euo pipefail
-            cd /opt/kitepop-hexo-standard
-            git fetch --prune origin main
-            git reset --hard origin/main
-            git submodule update --init --recursive
-            git log --oneline -1'
+          REMOTE=$(cat <<'REMOTE'
+          set -euo pipefail
+          cd /opt/kitepop-hexo-standard
+          git fetch --prune origin main
+          git reset --hard origin/main
+          git submodule update --init --recursive
+          git log --oneline -1
+          REMOTE
+          )
+          printf '%s\n' "$REMOTE" | $SSH "$VPS_USER@$VPS_HOST" bash -s
 
       - name: Render and publish
         env:
@@ -83,12 +97,61 @@ jobs:
         run: |
           set -euo pipefail
           SSH="ssh -i $SSH_KEY_FILE -p $DEPLOY_PORT -o BatchMode=yes -o IdentitiesOnly=yes"
-          $SSH "$VPS_USER@$VPS_HOST" 'set -euo pipefail
-            cd /opt/kitepop-hexo-standard
-            bash operations/publish.sh
-            echo "--- live release ---"
-            readlink -f /var/www/myblog-arknights
-            ls /var/www/myblog-arknights/index.html'
+          REMOTE=$(cat <<'REMOTE'
+          set -euo pipefail
+          cd /opt/kitepop-hexo-standard
+          bash operations/publish.sh
+          echo "--- live release ---"
+          readlink -f /var/www/myblog-arknights
+          ls /var/www/myblog-arknights/index.html
+          REMOTE
+          )
+          printf '%s\n' "$REMOTE" | $SSH "$VPS_USER@$VPS_HOST" bash -s
+
+      - name: Prune old releases and backups
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          set -euo pipefail
+          SSH="ssh -i $SSH_KEY_FILE -p $DEPLOY_PORT -o BatchMode=yes -o IdentitiesOnly=yes"
+          # Retention counts go in as positional args so they expand on the VPS,
+          # not on the runner where they would silently be empty (and would then
+          # delete every release, including the live one).
+          REMOTE=$(cat <<'REMOTE'
+          set -euo pipefail
+          keep_releases="$1"
+          keep_backups="$2"
+          live="$(readlink -f /var/www/myblog-arknights)"
+
+          # Delete releases older than the newest $keep_releases, never the live one.
+          ls -dt /var/www/myblog-arknights-* 2>/dev/null \
+            | tail -n "+$((keep_releases + 1))" \
+            | while IFS= read -r dir; do
+                if [ "$dir" = "$live" ]; then
+                  echo "skip (live): $dir"
+                  continue
+                fi
+                echo "removing release: $dir"
+                rm -rf -- "$dir"
+              done
+
+          # Same retention for the source tarballs written by publish.sh.
+          ls -dt /opt/kitepop-backups/hexo-source-*.tar.gz 2>/dev/null \
+            | tail -n "+$((keep_backups + 1))" \
+            | while IFS= read -r file; do
+                echo "removing backup: $file"
+                rm -f -- "$file"
+              done
+
+          echo "--- remaining releases ---"
+          ls -d /var/www/myblog-arknights-* 2>/dev/null | wc -l
+          echo "--- disk ---"
+          df -h / | tail -1
+          REMOTE
+          )
+          printf '%s\n' "$REMOTE" \
+            | $SSH "$VPS_USER@$VPS_HOST" bash -s -- "$KEEP_RELEASES" "$KEEP_BACKUPS"
 
       - name: Smoke-test the live site
         run: |

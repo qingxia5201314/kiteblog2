@@ -41,6 +41,9 @@ tar -czhf /opt/kitepop-backups/hexo-source-$STAMP.tar.gz source _config.yml _con
 # Strip the unreferenced, render-blocking FontAwesome stylesheet before
 # rendering. Safe to run every time; see operations/patch-fontawesome.sh.
 bash operations/patch-fontawesome.sh
+# Point the theme's pagination links at its own language strings; without this
+# they render Hexo's hardcoded "Prev"/"Next". See operations/patch-theme-i18n.sh.
+bash operations/patch-theme-i18n.sh
 printf 'public_dir: %s\nrender_drafts: false\n' "$OUT" > operations/release.yml
 node node_modules/hexo/bin/hexo generate --config _config.yml,operations/release.yml
 test -s "$OUT/index.html"

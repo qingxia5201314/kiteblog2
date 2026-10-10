@@ -32,3 +32,7 @@ Thumbs.db
 .gitignore.bak-before-git-init
 source/_discarded/
 source/Untitled/
+
+# local safety copies produced during one-off repairs
+operations/*.bak-*
+themes/arknights.bak-*

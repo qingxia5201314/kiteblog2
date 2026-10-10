@@ -151,6 +151,8 @@ module.exports = function (baseUrl) {
     uploadImage: function(data, filename)  {return post('/images/upload', {data: data, filename: filename});},
     remove: function(id)  {return post('/posts/' + id + '/remove');},
     publish: function(id)  {return post('/posts/' + id + '/publish');},
+    rebuild: function()  {return post('/rebuild');}, // KITEPOP_EDITOR_PATCH_API
+    waitForPublish: waitForPublish,
   publishStatus: function()  {return get('/publish-status');},
     unpublish: function(id)  {return post('/posts/' + id + '/unpublish');},
     renamePost: function(id, filename)  {return post('/posts/' + id + '/rename', {
@@ -176,13 +178,13 @@ var App = React.createClass({displayName: 'App',
     return React.DOM.div({className: "app"}, 
       React.DOM.div({className: "app_header"}, 
         React.DOM.img({src: "logo.png", className: "app_logo"}), 
-        React.DOM.span({className: "app_title"}, "Hexo Admin"), 
+        React.DOM.span({className: "app_title"}, "博客后台"), 
         React.DOM.ul({className: "app_nav"}, 
-          React.DOM.li(null, Link({to: "posts"}, "Posts")), 
-          React.DOM.li(null, Link({to: "pages"}, "Pages")), 
-          React.DOM.li(null, Link({to: "about"}, "About")), 
-          React.DOM.li(null, Link({to: "deploy"}, "Deploy")), 
-          React.DOM.li(null, Link({to: "settings"}, "Settings"))
+          React.DOM.li(null, Link({to: "posts"}, "文章")), 
+          React.DOM.li(null, Link({to: "pages"}, "页面")), 
+          React.DOM.li(null, Link({to: "about"}, "关于")), 
+          React.DOM.li(null, Link({to: "deploy"}, "部署")), 
+          React.DOM.li(null, Link({to: "settings"}, "设置"))
         )
       ), 
       React.DOM.div({className: "app_main"}, 
@@ -255,7 +257,7 @@ var AuthSetup = React.createClass({displayName: 'AuthSetup',
   render: function() {
     return (
       React.DOM.div({className: "authSetup"}, 
-        React.DOM.h1(null, "Authentification Setup"), 
+        React.DOM.h1(null, "认证设置"), 
         React.DOM.p(null, 
           "You can secure hexo-admin with a password by adding a section to your ", 
           React.DOM.code(null, "_config.yml"), ". This page is here to easily get it setup up." + ' ' +
@@ -283,9 +285,9 @@ var AuthSetup = React.createClass({displayName: 'AuthSetup',
                  onChange: this.handleSecretChange, 
                  defaultValue: this.state.secret})
         ), 
-        React.DOM.h2(null, "Admin Config Section"), 
+        React.DOM.h2(null, "后台配置区"), 
         React.DOM.p(null, 
-          "Copy this into your ", React.DOM.code(null, "_config.yml"), ", and restart Hexo. Now you'll" + ' ' +
+          "把下面内容复制到 ", React.DOM.code(null, "_config.yml"), ", and restart Hexo. Now you'll" + ' ' +
           "be protected with a password!"
         ), 
         AdminYaml({username: this.state.username, 
@@ -497,12 +499,12 @@ var CheckGrammar = React.createClass({displayName: 'CheckGrammar',
       'margin-top': '-24px'
     }
     return (React.DOM.div({className: "post-content editor_rendered"}, 
-      React.DOM.h2(null, "Writing Suggestions"), 
-      React.DOM.p({style: creditStyle}, "Brought to you by ", React.DOM.a({href: "https://github.com/btford/write-good", target: "_blank"}, "write-good"), "."), 
+      React.DOM.h2(null, "写作建议"), 
+      React.DOM.p({style: creditStyle}, "技术支持：", React.DOM.a({href: "https://github.com/btford/write-good", target: "_blank"}, "write-good"), "."), 
       this.state.suggestions, 
       React.DOM.button({onClick: this.props.toggleGrammar, 
               className: "pb-button grammar_backToPreview"}, 
-      "Back to Preview"
+      "返回预览"
       )
     ))
   }
@@ -760,28 +762,28 @@ var ConfigDropper = React.createClass({displayName: 'ConfigDropper',
   config: function () {
     return React.DOM.div({className: "config"}, 
       React.DOM.div({className: "config_section"}, 
-        React.DOM.div({className: "config_section-title"}, "Date"), 
+        React.DOM.div({className: "config_section-title"}, "日期"), 
         React.DOM.input({
           className: "config_date", 
           value: this.state.date, 
           onChange: this._onChangeDate})
       ), 
       React.DOM.div({className: "config_section"}, 
-        React.DOM.div({className: "config_section-title"}, "Author"), 
+        React.DOM.div({className: "config_section-title"}, "作者"), 
         React.DOM.input({
             className: "config_author", 
             value: this.state.author, 
             onChange: this._onChangeAuthor})
       ), 
       React.DOM.div({className: "config_section"}, 
-        React.DOM.div({className: "config_section-title"}, "Tags"), 
+        React.DOM.div({className: "config_section-title"}, "标签"), 
         AutoList({
           options: this.props.tagsCategoriesAndMetadata.tags, 
           values: this.state.tags, 
           onChange: this._onChange.bind(null, 'tags')})
       ), 
       React.DOM.div({className: "config_section"}, 
-        React.DOM.div({className: "config_section-title"}, "Categories"), 
+        React.DOM.div({className: "config_section-title"}, "分类"), 
         AutoList({
           options: this.props.tagsCategoriesAndMetadata.categories, 
           values: this.state.categories, 
@@ -820,7 +822,7 @@ var ConfigDropper = React.createClass({displayName: 'ConfigDropper',
         "config-dropper": true,
         "config-dropper--open": this.state.open
       }), 
-           title: "Settings"}, 
+           title: "设置"}, 
       React.DOM.div({className: "config-dropper_handle", 
            onClick: this._toggleShow}, 
         React.DOM.i({className: "fa fa-gear"})
@@ -985,15 +987,15 @@ var Deploy = React.createClass({displayName: 'Deploy',
     if (this.state.error) {
       body = React.DOM.h4(null, "Error: ", this.state.error)
     } else if (this.state.status === 'loading') {
-      body = React.DOM.h4(null, "Loading...")
+      body = React.DOM.h4(null, "加载中...")
     } else if (this.state.status === 'success') {
       body = (
         React.DOM.div(null, 
-          React.DOM.h4(null, "Std Output"), 
+          React.DOM.h4(null, "标准输出"), 
           React.DOM.pre(null, 
             this.state.stdout
           ), 
-          React.DOM.h4(null, "Std Error"), 
+          React.DOM.h4(null, "错误输出"), 
           React.DOM.pre(null, 
             this.state.stderr
           )
@@ -1011,10 +1013,10 @@ var Deploy = React.createClass({displayName: 'Deploy',
             type: "text", 
             className: "deploy_message", 
             value: this.state.message, 
-            placeholder: "Deploy/commit message", 
+            placeholder: "部署说明（提交信息）", 
             onChange: function(e)  {return this.setState({message: e.target.value});}.bind(this)}
           ), 
-          React.DOM.input({type: "submit", value: "Deploy"})
+          React.DOM.input({type: "submit", value: "部署"})
         ), 
         body
       )
@@ -1104,13 +1106,13 @@ var Editor = React.createClass({displayName: 'Editor',
           onChange: this.props.onChange}), 
         !this.props.isPage && (this.props.isDraft ?
           React.DOM.button({className: "editor_publish", onClick: this.props.onPublish, disabled: this.props.publishing}, 
-            (this.props.publishing ? "Publishing..." : "Publish")
+            (this.props.publishing ? "发布中..." : "发布")
           ) :
           React.DOM.button({className: "editor_unpublish", onClick: this.props.onUnpublish, disabled: this.props.publishing}, 
-            (this.props.publishing ? "Unpublishing..." : "Unpublish")
+            (this.props.publishing ? "取消发布中..." : "取消发布")
           )), 
           !this.props.isPage && (this.props.isDraft ?
-          React.DOM.button({className: "editor_remove", title: "Remove", 
+          React.DOM.button({className: "editor_remove", title: "删除", 
                   onClick: this.props.onRemove}, 
             React.DOM.i({className: "fa fa-trash-o", 'aria-hidden': "true"})
           ) :
@@ -1119,7 +1121,7 @@ var Editor = React.createClass({displayName: 'Editor',
             React.DOM.i({className: "fa fa-trash-o", 'aria-hidden': "true"})
           )), 
           !this.props.isPage &&
-          React.DOM.button({className: "editor_checkGrammar", title: "Check for Writing Improvements", 
+          React.DOM.button({className: "editor_checkGrammar", title: "检查写作改进建议", 
                   onClick: this.onCheckGrammar}, 
             React.DOM.i({className: "fa fa-check-circle-o"})
           )
@@ -1153,9 +1155,9 @@ var Editor = React.createClass({displayName: 'Editor',
         React.DOM.div({className: "editor_display"}, 
           React.DOM.div({className: "editor_display-header"}, 
             React.DOM.span({className: "editor_word-count"}, 
-              this.props.wordCount, " words"
+              this.props.wordCount, " 词"
             ), 
-            "Preview", 
+            "预览", 
             ' ', React.DOM.a({className: "editor_perma-link", href: this.state.previewLink, target: "_blank"}, 
               React.DOM.i({className: "fa fa-link"}), " ", this.state.previewLink
             )
@@ -1296,7 +1298,7 @@ var NewPage = React.createClass({displayName: 'NewPage',
       return React.DOM.div({className: "new-post", onClick: this._onShow}, 
         React.DOM.div({className: "new-post_button"}, 
           React.DOM.i({className: "fa fa-plus"}), ' ', 
-          "New page"
+          "新建页面"
         )
       )
     }
@@ -1389,7 +1391,7 @@ var NewPost = React.createClass({displayName: 'NewPost',
       return React.DOM.div({className: "new-post", onClick: this._onShow}, 
         React.DOM.div({className: "new-post_button"}, 
           React.DOM.i({className: "fa fa-plus"}), ' ', 
-          "New Post"
+          "新建文章"
         )
       )
     }
@@ -1484,13 +1486,16 @@ var Page = React.createClass({displayName: 'Page',
       if (!this.state.page.isDraft) return
       var self = this
       this.setState({publishing: true, publishError: null, publishMessage: null})
+      // KITEPOP_EDITOR_PATCH_PAGEPUB
       api.publish(this.state.page._id).then(function (result)  {
-        // The server answered immediately with the job it just queued; the actual
-        // rebuild is still running, so poll until it settles.
         if (result && result.post) self.setState({page: result.post})
-        // Publish queued; rebuild in background
+        return api.waitForPublish(function (message) {
+          self.setState({publishMessage: message})
+        })
       }).then(function ()  {
-        self.setState({publishing: false, publishMessage: "Published. Static site rebuilt."})
+        return api.page(self.state.page._id)
+      }).then(function (page)  {
+        self.setState({publishing: false, page: page, publishMessage: "已发布，前台已更新。"})
       }, function (err)  {
         self.setState({publishing: false, publishError: (err && err.message) || String(err)})
       });
@@ -1501,12 +1506,14 @@ var Page = React.createClass({displayName: 'Page',
       var self = this
       this.setState({publishing: true, publishError: null, publishMessage: null})
       api.unpublish(this.state.page._id).then(function (result)  {
-        // The server answered immediately with the job it just queued; the actual
-        // rebuild is still running, so poll until it settles.
         if (result && result.post) self.setState({page: result.post})
-        // Publish queued; rebuild in background
+        return api.waitForPublish(function (message) {
+          self.setState({publishMessage: message})
+        })
       }).then(function ()  {
-        self.setState({publishing: false, publishMessage: "Moved back to drafts. Static site rebuilt."})
+        return api.page(self.state.page._id)
+      }).then(function (page)  {
+        self.setState({publishing: false, page: page, publishMessage: "已退回草稿，前台已更新。"})
       }, function (err)  {
         self.setState({publishing: false, publishError: (err && err.message) || String(err)})
       });
@@ -1529,7 +1536,7 @@ var Page = React.createClass({displayName: 'Page',
     var page = this.state.page
     var settings = this.state.settings
     if (!page || !settings) {
-      return React.DOM.span(null, "Loading...")
+      return React.DOM.span(null, "加载中...")
     }
     return Editor({
       isPage: true,
@@ -1602,7 +1609,7 @@ var Pages = React.createClass({displayName: 'Pages',
 
   render: function () {
     if (!this.state.pages) {
-      return React.DOM.div({className: "pages"}, "Loading...")
+      return React.DOM.div({className: "pages"}, "加载中...")
     }
     var current = this.state.pages[this.state.selected] || {}
     var url = window.location.href.replace(/^.*\/\/[^\/]+/, '').split('/')
@@ -1640,7 +1647,7 @@ var Pages = React.createClass({displayName: 'Pages',
         'posts_display': true,
         'posts_display--draft': current.isDraft
       })}, 
-        current.isDraft && React.DOM.div({className: "posts_draft-message"}, "Draft"), 
+        current.isDraft && React.DOM.div({className: "posts_draft-message"}, "草稿"), 
         Rendered({
           ref: "rendered", 
           className: "posts_content", 
@@ -1740,6 +1747,36 @@ var Post = React.createClass({displayName: 'Post',
       rendered: marked(text)
     })
     this._post({_content: text})
+    this._scheduleRebuild() // KITEPOP_EDITOR_PATCH_CONTENT
+  },
+
+  // KITEPOP_EDITOR_PATCH_SAVE: after an edit settles, rebuild the static site so a published
+  // post is live immediately. Drafts are skipped: nothing about them is public
+  // yet, and the button still publishes them. Concurrent edits collapse into one
+  // rebuild by (re)starting the debounce timer.
+  _scheduleRebuild: function () {
+    if (!this.state || !this.state.post && !this.state.page) return
+    var item = this.state.post || this.state.page
+    if (!item || item.isDraft) return
+    var self = this
+    clearTimeout(this._rebuildTimer)
+    this._rebuildTimer = setTimeout(function () {
+      self._runRebuild()
+    }, 1500)
+  },
+
+  _runRebuild: function () {
+    var self = this
+    this.setState({publishing: true, publishError: null, publishMessage: '正在重建静态站...'})
+    api.rebuild().then(function () {
+      return api.waitForPublish(function (message) {
+        self.setState({publishMessage: message})
+      })
+    }).then(function () {
+      self.setState({publishing: false, publishMessage: '已保存，前台已更新。'})
+    }, function (err) {
+      self.setState({publishing: false, publishError: (err && err.message) || String(err)})
+    })
   },
 
   handleChangeTitle: function (title) {
@@ -1748,19 +1785,25 @@ var Post = React.createClass({displayName: 'Post',
     }
     this.setState({title: title});
     this._post({title: title})
+    this._scheduleRebuild()
   },
 
     handlePublish: function () {
       if (!this.state.post.isDraft) return
       var self = this
       this.setState({publishing: true, publishError: null, publishMessage: null})
+      // KITEPOP_EDITOR_PATCH_POSTPUB: the API returns as soon as the rebuild is queued, so wait for
+      // the job before reporting anything, then adopt the post's new state --
+      // that is what flips the toolbar between Publish and Unpublish.
       api.publish(this.state.post._id).then(function (result)  {
-        // The server answered immediately with the job it just queued; the actual
-        // rebuild is still running, so poll until it settles.
         if (result && result.post) self.setState({post: result.post})
-        // Publish queued; rebuild in background
+        return api.waitForPublish(function (message) {
+          self.setState({publishMessage: message})
+        })
       }).then(function ()  {
-        self.setState({publishing: false, publishMessage: "Published. Static site rebuilt."})
+        return api.post(self.state.post._id)
+      }).then(function (post)  {
+        self.setState({publishing: false, post: post, publishMessage: "已发布，前台已更新。"})
       }, function (err)  {
         self.setState({publishing: false, publishError: (err && err.message) || String(err)})
       });
@@ -1771,12 +1814,14 @@ var Post = React.createClass({displayName: 'Post',
       var self = this
       this.setState({publishing: true, publishError: null, publishMessage: null})
       api.unpublish(this.state.post._id).then(function (result)  {
-        // The server answered immediately with the job it just queued; the actual
-        // rebuild is still running, so poll until it settles.
         if (result && result.post) self.setState({post: result.post})
-        // Publish queued; rebuild in background
+        return api.waitForPublish(function (message) {
+          self.setState({publishMessage: message})
+        })
       }).then(function ()  {
-        self.setState({publishing: false, publishMessage: "Moved back to drafts. Static site rebuilt."})
+        return api.post(self.state.post._id)
+      }).then(function (post)  {
+        self.setState({publishing: false, post: post, publishMessage: "已退回草稿，前台已更新。"})
       }, function (err)  {
         self.setState({publishing: false, publishError: (err && err.message) || String(err)})
       });
@@ -1812,7 +1857,7 @@ var Post = React.createClass({displayName: 'Post',
     var post = this.state.post
     var settings = this.state.settings
     if (!post || !this.state.tagsCategoriesAndMetadata || !settings) {
-      return React.DOM.span(null, "Loading...")
+      return React.DOM.span(null, "加载中...")
     }
     return Editor({
       post: this.state.post,
@@ -1887,7 +1932,7 @@ var Posts = React.createClass({displayName: 'Posts',
 
   render: function () {
     if (!this.state.posts) {
-      return React.DOM.div({className: "posts"}, "Loading...")
+      return React.DOM.div({className: "posts"}, "加载中...")
     }
     var current = this.state.posts[this.state.selected] || {}
     var url = window.location.href.replace(/^.*\/\/[^\/]+/, '').split('/')
@@ -1925,7 +1970,7 @@ var Posts = React.createClass({displayName: 'Posts',
         'posts_display': true,
         'posts_display--draft': current.isDraft
       })}, 
-        current.isDraft && React.DOM.div({className: "posts_draft-message"}, "Draft"), 
+        current.isDraft && React.DOM.div({className: "posts_draft-message"}, "草稿"), 
         Rendered({
           ref: "rendered", 
           className: "posts_content", 
@@ -2012,7 +2057,7 @@ var RenameFile = React.createClass({displayName: 'RenameFile',
       React.DOM.div({className: "fileRename"}, 
         !this.state.editing &&
           React.DOM.div({className: "fileRename_display", 
-            title: "Click to rename", 
+            title: "点击重命名", 
             onClick: this.toggleEditing}, 
             this.state.filename
           ), 
@@ -2022,10 +2067,10 @@ var RenameFile = React.createClass({displayName: 'RenameFile',
             onKeyDown: this.handleKeyPress, 
             defaultValue: this.state.editingName}), 
           React.DOM.span({className: "fileRename_buttons"}, 
-            React.DOM.i({title: "Cancel", 
+            React.DOM.i({title: "取消", 
               className: "fa fa-times", 
               onClick: this.toggleEditing}), 
-            React.DOM.i({title: "Rename File", 
+            React.DOM.i({title: "重命名文件", 
               className: "fa fa-check", 
               onClick: this.handleRenameFile})
           ))
@@ -2287,7 +2332,7 @@ var Settings = React.createClass({displayName: 'Settings',
 
     return (
       React.DOM.div({className: "settings", style: divStyle}, 
-        React.DOM.h1(null, "Settings"), 
+        React.DOM.h1(null, "设置"), 
         React.DOM.p(null, 
           "Set various settings for your admin panel and editor."
         ), 

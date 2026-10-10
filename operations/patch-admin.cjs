@@ -56,10 +56,11 @@ mirror(
   'admin server entry (path guards)'
 );
 
-// 3. api.js -- async publish + /publish-status + JSON error bodies.
+// 3. api.js -- async publish + /publish-status + /rebuild + JSON error bodies.
 mirror('operations/hexo-admin-api.js', `${ADMIN}/api.js`, 'admin API (async publish)');
 
-// 4. www/bundle.js -- the editor UI that drives the async publish flow.
+// 4. www/bundle.js -- the editor UI. Drives the async publish flow, rebuilds
+//    the static site after an edit, and carries the Chinese interface.
 mirror('operations/hexo-admin-bundle.js', `${ADMIN}/www/bundle.js`, 'admin editor bundle');
 
 // 5. www/index.html -- pristine + viewport meta. Copied before install.cjs

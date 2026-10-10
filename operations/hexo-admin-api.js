@@ -125,8 +125,16 @@ module.exports = function (app, hexo) {
     }
 
     // Rebuild failed: put the post back where it was so the repo stays
-    // consistent with whatever is currently live on disk.
+    // consistent with whatever is currently live on disk. A plain rebuild job
+    // has no post to revert, and must not report a bogus restore error.
     var detail = shortenPublishError(error, stderr)
+    if (!postId || !publishJob.previousSource) {
+      publishJob.state = 'failed'
+      publishJob.finishedAt = Date.now()
+      publishJob.message = 'Static site rebuild failed: ' + detail
+      hexo.log.e('admin: publish job %s failed: %s', publishJob.id, publishJob.message)
+      return
+    }
     update(postId, {source: publishJob.previousSource}, function (revertError) {
       publishJob.state = 'failed'
       publishJob.finishedAt = Date.now()
@@ -168,6 +176,24 @@ module.exports = function (app, hexo) {
       startStaticPublish(action, id, oldSource)
       res.done({job: snapshotJob(), post: addIsDraft(post)})
     }, hexo)
+  }
+
+  // Rebuild the static site for content that is already published.
+  //
+  // Editing a published post only rewrites its markdown: the live site is a
+  // prerendered snapshot under /var/www, so without this the change is invisible
+  // on the front end until something else happens to trigger a publish. The
+  // editor calls this after a save settles, so "edit and it is live" works the
+  // same way publishing a draft does.
+  function rebuild(body, res) {
+    if (publishJob.state === 'running') {
+      // Another rebuild is in flight; it will pick up this edit too, because
+      // publish.sh renders whatever is on disk when it starts. Reporting the
+      // running job keeps the editor's progress bar accurate.
+      return res.done({job: snapshotJob(), queued: false})
+    }
+    startStaticPublish('rebuild', null, null)
+    res.done({job: snapshotJob(), queued: true})
   }
 
   function publish(id, body, res) {
@@ -257,6 +283,11 @@ module.exports = function (app, hexo) {
 
   use('publish-status', function (req, res) {
     res.done(snapshotJob())
+  });
+
+  use('rebuild', function (req, res, next) {
+    if (req.method !== 'POST') return next()
+    rebuild(req.body, res)
   });
 
   use('settings/list', function (req, res) {

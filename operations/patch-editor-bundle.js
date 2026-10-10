@@ -1,40 +1,48 @@
 #!/usr/bin/env node
 // Patch the hexo-admin editor bundle.
 //
-// Unlike the other operations/patch-*.js scripts this one does not copy a
-// checked-in file over node_modules: operations/hexo-admin-bundle.js *is* the
-// patched bundle, so it is the source of truth and this script rewrites it in
-// place. Run it from `npm run patch:bundle` after editing the bundle by hand, or
-// let patch-admin.cjs install the result.
+// operations/hexo-admin-bundle.js *is* the patched bundle (a webpack build whose
+// modules are readable, one module per line), so this script rewrites it in
+// place. Run it with `npm run patch:bundle` after editing the bundle by hand;
+// patch-admin.cjs installs the result into node_modules.
 //
-// Two behavioural fixes plus the interface translation:
+// It runs against a pristine upstream bundle, so `npm pack hexo-admin@2.3.0` and
+// point BUNDLE at package/www/bundle.js to start over.
+//
+// Two behaviour changes plus the interface translation:
 //
 // 1. Editing a published post rebuilt nothing.
-//    handleChangeContent/handleChangeTitle save the markdown through the API and
-//    stop there. The live site is a prerendered snapshot under /var/www, so the
-//    edit stayed invisible on the front end until some unrelated publish
-//    happened. Both handlers now ask the backend to rebuild once the save
-//    settles, and report progress in the editor's status bar.
+//    handleChangeContent/handleChangeTitle save the markdown and stop there. The
+//    live site is a prerendered snapshot under /var/www, so the edit stayed
+//    invisible on the front end until an unrelated publish happened. Both
+//    handlers now ask the backend to rebuild once the save settles, and report
+//    progress in the editor's status bar.
 //
-// 2. Publish/unpublish never refreshed.
-//    handlePublish/handleUnpublish called api.publish() and immediately claimed
-//    "Published. Static site rebuilt." The backend answers as soon as it has
-//    *queued* the job, so the button kept reading "Unpublish" over a post that
-//    was still a draft, and the status bar lied. The helpers wired up here
-//    (waitForPublish) already existed but were never called.
+// 2. A publish could not report its own failure, and the button lied while the
+//    rebuild ran.
+//    Upstream calls api.publish(id).then(post => setState({post})) and stops.
+//    The backend answers as soon as the rebuild is *queued* -- the ~30s render
+//    happens afterwards -- so the toolbar flipped immediately and a failed
+//    rebuild was never surfaced. The handlers now poll publish-status via
+//    api.waitForPublish, then re-read the post.
+//
+//   (An earlier revision of this patch also rewrote the poller to call
+//    `api.publishStatus()` from inside api's own module, where `api` is not in
+//    scope, so any publish threw "api is not defined". That shape is repaired
+//    below and its return is a hard error.)
 //
 // Usage:
 //   node operations/patch-editor-bundle.js [--check] [--dry-run]
 //
 //   --dry-run  report what would change, touch nothing
-//   --check    exit non-zero if any expected anchor is missing or already
-//              applied in a way that suggests drift
+//   --check    exit non-zero if a required anchor is missing or a broken shape
+//              is present, without writing anything
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const BUNDLE = path.join(HERE, 'hexo-admin-bundle.js');
+const BUNDLE = process.env.KITEPOP_BUNDLE || path.join(HERE, 'hexo-admin-bundle.js');
 const DRY = process.argv.includes('--dry-run');
 const CHECK = process.argv.includes('--check');
 
@@ -43,27 +51,28 @@ const MARKER = 'KITEPOP_EDITOR_PATCH';
 // --------------------------------------------------------------------------- //
 // interface translation
 // --------------------------------------------------------------------------- //
-// Every one of these is a literal in a React.DOM.* text position or an element
-// title. None is used as a lookup key, a route, or a className, so replacing
-// them cannot change behaviour. The pairs are ordered longest-first where one
-// string is a prefix of another ("Publishing..." before "Publish").
+// Every entry is a display literal: a React.DOM.* text child or an element
+// title. None is a lookup key, a route or a className, so replacing them cannot
+// change behaviour. Longest-first where one string prefixes another.
 const TRANSLATIONS = [
   ['Hexo Admin', '博客后台'],
   ['New Post', '新建文章'],
   ['New page', '新建页面'],
   ['Deploy/commit message', '部署说明（提交信息）'],
-  ['Published. Static site rebuilt.', '已发布，静态站已重建。'],
-  ['Moved back to drafts. Static site rebuilt.', '已退回草稿，静态站已重建。'],
-  ['Rebuilding the static site... ', '正在重建静态站... '],
+  ['This is the Hexo Admin Plugin', '这里是博客后台'],
+  ['Goal: Provide an awesome admin experience for managing your blog.', '目标：提供一个顺手的博客管理后台。'],
+  ['Useful links:', '相关链接：'],
+  ['Hexo site', 'Hexo 官网'],
+  ['Github page for this plugin', '本插件的 GitHub 页面'],
+  ['Published. Static site rebuilt.', '已发布，前台已更新。'],
+  ['Moved back to drafts. Static site rebuilt.', '已退回草稿，前台已更新。'],
   ['Publishing...', '发布中...'],
   ['Unpublishing...', '取消发布中...'],
   ['Check for Writing Improvements', '检查写作改进建议'],
   ['Back to Preview', '返回预览'],
   ['Writing Suggestions', '写作建议'],
   ['Admin Config Section', '后台配置区'],
-  ['Auth setup', '认证设置'],
   ['Authentification Setup', '认证设置'],
-  ['Deploy/commit', '部署/提交'],
   ['Rename File', '重命名文件'],
   ['Click to rename', '点击重命名'],
   ['Std Output', '标准输出'],
@@ -71,6 +80,10 @@ const TRANSLATIONS = [
   ['Loading...', '加载中...'],
   ['Brought to you by ', '技术支持：'],
   ['Copy this into your ', '把下面内容复制到 '],
+  ['Delete this post?', '删除这篇文章？'],
+  ['This operation will move current draft into source/_discarded folder.', '该操作会把当前草稿移入 source/_discarded 目录。'],
+  ['Yes', '确定'],
+  ['No', '取消'],
   ['Posts', '文章'],
   ['Pages', '页面'],
   ['About', '关于'],
@@ -92,30 +105,96 @@ const TRANSLATIONS = [
 // --------------------------------------------------------------------------- //
 // behaviour fixes
 // --------------------------------------------------------------------------- //
-// The editor's save path, shared by the content and title handlers. Inserted
-// into both Post and Page components, whose handlers are byte-identical.
-const SAVE_ANCHOR = `  handleChangeTitle: function (title) {
+// 1. api: add rebuild() and a bound waitForPublish. Upstream's api object is
+//    built inside `module.exports = function (baseUrl)`, so anything exported
+//    from there must close over `get`, not reach for the api object by name.
+const API_ANCHOR = `    publish: function(id)  {return post('/posts/' + id + '/publish');},`;
+const API_PATCHED = `    publish: function(id)  {return post('/posts/' + id + '/publish');},
+    rebuild: function()  {return post('/rebuild');}, // ${MARKER}_API
+    publishStatus: function()  {return get('/publish-status');},
+    waitForPublish: function(onProgress)  {return waitForPublish(this.publishStatus, onProgress);},`;
+
+// 2. The poller helper. Inserted once, module-level, alongside the other api
+//    helpers. It takes its poll source as an argument because `api` is not in
+//    scope at this level.
+const POLLER_ANCHOR = `function _get(baseUrl, url, params) {`;
+const POLLER_HELPER = `// ${MARKER}_POLLER: poll /publish-status until the background rebuild settles,
+// reporting elapsed time so the editor is never silent during a ~30s publish.
+// Takes the poller as an argument: this runs at module level, where the api
+// object returned by module.exports is not in scope.
+var PUBLISH_POLL_INTERVAL = 1000
+var PUBLISH_POLL_MAX_MS = 10 * 60 * 1000
+
+function waitForPublish(pollOnce, onProgress) {
+  return new Promise(function (resolve, reject) {
+    var started = Date.now()
+    function tick() {
+      pollOnce().then(function (job) {
+        job = job || {}
+        if (job.running) {
+          var secs = Math.round((job.elapsedMs || (Date.now() - started)) / 1000)
+          onProgress('\u6b63\u5728\u91cd\u5efa\u9759\u6001\u7ad9... ' + secs + 's')
+          setTimeout(tick, PUBLISH_POLL_INTERVAL)
+          return
+        }
+        if (job.state === 'succeeded') return resolve(job)
+        if (job.state === 'failed') {
+          return reject(new Error(job.message || 'Static site rebuild failed'))
+        }
+        // 'idle' means the backend restarted mid-publish; do not poll forever.
+        if (job.state === 'idle') {
+          return reject(new Error('Publish status was lost; check the site and retry'))
+        }
+        setTimeout(tick, PUBLISH_POLL_INTERVAL)
+      }, function (err) {
+        if (Date.now() - started > PUBLISH_POLL_MAX_MS) {
+          return reject(err || new Error('Timed out waiting for the publish job'))
+        }
+        setTimeout(tick, PUBLISH_POLL_INTERVAL)
+      })
+    }
+    tick()
+  })
+}
+
+function _get(baseUrl, url, params) {`;
+
+// 3. Editor save path: both Post and Page carry these two handlers verbatim
+//    except for _post/_page, so the anchors below take the call name as a
+//    parameter and are applied to each component.
+function saveAnchors(call) {
+  const titleAnchor = `  handleChangeTitle: function (title) {
     if (title === this.state.title) {
       return
     }
     this.setState({title: title});
-    this._post({title: title})
+    this.${call}({title: title})
   },
 `;
-
-const SAVE_PATCHED = `  // ${MARKER}_SAVE: after an edit settles, rebuild the static site so a published
-  // post is live immediately. Drafts are skipped: nothing about them is public
-  // yet, and the button still publishes them. Concurrent edits collapse into one
-  // rebuild by (re)starting the debounce timer.
+  const contentAnchor = `  handleChangeContent: function (text) {
+    if (text === this.state.raw) {
+      return
+    }
+    this.setState({
+      raw: text,
+      updated: null,
+      rendered: marked(text)
+    })
+    this.${call}({_content: text})
+  },
+`;
+  // The helper block is inserted once per component, attached to the title
+  // handler so the marker is unique per component.
+  const helpers = `  // ${MARKER}_SAVE_${call.toUpperCase()}: after an edit settles, rebuild the static site
+  // so an edit to a published post is live immediately. Drafts are skipped --
+  // nothing about them is public yet, and the button still publishes them.
+  // Concurrent edits collapse into one rebuild by restarting the timer.
   _scheduleRebuild: function () {
-    if (!this.state || !this.state.post && !this.state.page) return
-    var item = this.state.post || this.state.page
+    var item = this.state && (this.state.post || this.state.page)
     if (!item || item.isDraft) return
     var self = this
     clearTimeout(this._rebuildTimer)
-    this._rebuildTimer = setTimeout(function () {
-      self._runRebuild()
-    }, 1500)
+    this._rebuildTimer = setTimeout(function () { self._runRebuild() }, 1500)
   },
 
   _runRebuild: function () {
@@ -137,14 +216,11 @@ const SAVE_PATCHED = `  // ${MARKER}_SAVE: after an edit settles, rebuild the st
       return
     }
     this.setState({title: title});
-    this._post({title: title})
+    this.${call}({title: title})
     this._scheduleRebuild()
   },
 `;
-
-// Content handler: older builds pass the text straight through, the patched
-// builds already update state first.
-const CONTENT_ANCHOR = `  handleChangeContent: function (text) {
+  const contentPatched = `  handleChangeContent: function (text) {
     if (text === this.state.raw) {
       return
     }
@@ -153,166 +229,103 @@ const CONTENT_ANCHOR = `  handleChangeContent: function (text) {
       updated: null,
       rendered: marked(text)
     })
-    this._post({_content: text})
+    this.${call}({_content: text})
+    this._scheduleRebuild()
+  },
+`;
+  return {
+    titleAnchor,
+    helpers,
+    contentAnchor,
+    contentPatched,
+    // Shape of the content handler once patched. This block adds no marker of
+    // its own, so idempotency is keyed on this exact text.
+    contentDone: contentAnchor.replace("    this." + call + "({_content: text})\n  },\n", "    this." + call + "({_content: text})\n    this._scheduleRebuild()\n  },\n")
+  };
+}
+
+// 4. Publish/unpublish over `this.state.post` and `this.state.page`.
+function publishAnchors(noun) {
+
+  // The getter differs per component: posts use api.post, pages use api.page.
+  const getter = noun === 'post' ? 'post' : 'page';
+  const upstream = `handlePublish: function () {
+    if (!this.state.${noun}.isDraft) return
+    api.publish(this.state.${noun}._id).then(function(${noun})  {
+      this.setState({${noun}: ${noun}})
+    }.bind(this));
+  },
+
+  handleUnpublish: function () {
+    if (this.state.${noun}.isDraft) return
+    api.unpublish(this.state.${noun}._id).then(function(${noun})  {
+      this.setState({${noun}: ${noun}})
+    }.bind(this));
   },
 `;
 
-const CONTENT_PATCHED = `  handleChangeContent: function (text) {
-    if (text === this.state.raw) {
-      return
-    }
-    this.setState({
-      raw: text,
-      updated: null,
-      rendered: marked(text)
-    })
-    this._post({_content: text})
-    this._scheduleRebuild() // ${MARKER}_CONTENT
+  const patched = `handlePublish: function () { // ${MARKER}_PUB_${noun.toUpperCase()}
+    if (!this.state.${noun}.isDraft) return
+    var self = this
+    this.setState({publishing: true, publishError: null, publishMessage: null})
+    api.publish(this.state.${noun}._id).then(function (result)  {
+      if (result && result.post) self.setState({${noun}: result.post})
+      // The API returns as soon as the rebuild is queued; wait for it so a
+      // failure is surfaced and the toolbar is not updated prematurely.
+      return api.waitForPublish(function (message) {
+        self.setState({publishMessage: message})
+      })
+    }).then(function ()  {
+      return api.${getter}(self.state.${noun}._id)
+    }).then(function (item)  {
+      self.setState({publishing: false, ${noun}: item, publishMessage: "\u5df2\u53d1\u5e03\uff0c\u524d\u53f0\u5df2\u66f4\u65b0\u3002"})
+    }, function (err)  {
+      self.setState({publishing: false, publishError: (err && err.message) || String(err)})
+    });
+  },
+
+  handleUnpublish: function () {
+    if (this.state.${noun}.isDraft) return
+    var self = this
+    this.setState({publishing: true, publishError: null, publishMessage: null})
+    api.unpublish(this.state.${noun}._id).then(function (result)  {
+      if (result && result.post) self.setState({${noun}: result.post})
+      return api.waitForPublish(function (message) {
+        self.setState({publishMessage: message})
+      })
+    }).then(function ()  {
+      return api.${getter}(self.state.${noun}._id)
+    }).then(function (item)  {
+      self.setState({publishing: false, ${noun}: item, publishMessage: "\u5df2\u9000\u56de\u8349\u7a3f\uff0c\u524d\u53f0\u5df2\u66f4\u65b0\u3002"})
+    }, function (err)  {
+      self.setState({publishing: false, publishError: (err && err.message) || String(err)})
+    });
   },
 `;
+  return { upstream, patched };
+}
 
-// Publish: actually wait for the rebuild instead of claiming success on queue.
-const PUBLISH_ANCHOR = `      api.publish(this.state.post._id).then(function (result)  {
-        // The server answered immediately with the job it just queued; the actual
-        // rebuild is still running, so poll until it settles.
-        if (result && result.post) self.setState({post: result.post})
-        // Publish queued; rebuild in background
-      }).then(function ()  {
-        self.setState({publishing: false, publishMessage: "Published. Static site rebuilt."})
-      }, function (err)  {
-        self.setState({publishing: false, publishError: (err && err.message) || String(err)})
-      });
-    },
+// Shapes that must never survive: the poller reaching for `api` by name, which
+// is not in scope inside the api module.
+const FORBIDDEN = [
+  ['      api.publishStatus().then(function (job) {', 'poller calls api.publishStatus() out of scope'],
+  ['    waitForPublish: waitForPublish,', 'waitForPublish exported unbound (publishStatus not in scope)'],
+  ['function waitForPublish(onProgress) {', 'poller has no pollOnce parameter']
+];
 
-    handleUnpublish: function () {
-      if (this.state.post.isDraft) return
-      var self = this
-      this.setState({publishing: true, publishError: null, publishMessage: null})
-      api.unpublish(this.state.post._id).then(function (result)  {
-        // The server answered immediately with the job it just queued; the actual
-        // rebuild is still running, so poll until it settles.
-        if (result && result.post) self.setState({post: result.post})
-        // Publish queued; rebuild in background
-      }).then(function ()  {
-        self.setState({publishing: false, publishMessage: "Moved back to drafts. Static site rebuilt."})
-      }, function (err)  {
-        self.setState({publishing: false, publishError: (err && err.message) || String(err)})
-      });
-    },
-`;
-
-const PUBLISH_PATCHED = `      // ${MARKER}_POSTPUB: the API returns as soon as the rebuild is queued, so wait for
-      // the job before reporting anything, then adopt the post's new state --
-      // that is what flips the toolbar between Publish and Unpublish.
-      api.publish(this.state.post._id).then(function (result)  {
-        if (result && result.post) self.setState({post: result.post})
-        return api.waitForPublish(function (message) {
-          self.setState({publishMessage: message})
-        })
-      }).then(function ()  {
-        return api.post(self.state.post._id)
-      }).then(function (post)  {
-        self.setState({publishing: false, post: post, publishMessage: "\u5df2\u53d1\u5e03\uff0c\u524d\u53f0\u5df2\u66f4\u65b0\u3002"})
-      }, function (err)  {
-        self.setState({publishing: false, publishError: (err && err.message) || String(err)})
-      });
-    },
-
-    handleUnpublish: function () {
-      if (this.state.post.isDraft) return
-      var self = this
-      this.setState({publishing: true, publishError: null, publishMessage: null})
-      api.unpublish(this.state.post._id).then(function (result)  {
-        if (result && result.post) self.setState({post: result.post})
-        return api.waitForPublish(function (message) {
-          self.setState({publishMessage: message})
-        })
-      }).then(function ()  {
-        return api.post(self.state.post._id)
-      }).then(function (post)  {
-        self.setState({publishing: false, post: post, publishMessage: "\u5df2\u9000\u56de\u8349\u7a3f\uff0c\u524d\u53f0\u5df2\u66f4\u65b0\u3002"})
-      }, function (err)  {
-        self.setState({publishing: false, publishError: (err && err.message) || String(err)})
-      });
-    },
-`;
-
-// The Page (static page) component has the same two handlers over state.page.
-const PAGE_PUBLISH_ANCHOR = `      api.publish(this.state.page._id).then(function (result)  {
-        // The server answered immediately with the job it just queued; the actual
-        // rebuild is still running, so poll until it settles.
-        if (result && result.post) self.setState({page: result.post})
-        // Publish queued; rebuild in background
-      }).then(function ()  {
-        self.setState({publishing: false, publishMessage: "Published. Static site rebuilt."})
-      }, function (err)  {
-        self.setState({publishing: false, publishError: (err && err.message) || String(err)})
-      });
-    },
-
-    handleUnpublish: function () {
-      if (this.state.page.isDraft) return
-      var self = this
-      this.setState({publishing: true, publishError: null, publishMessage: null})
-      api.unpublish(this.state.page._id).then(function (result)  {
-        // The server answered immediately with the job it just queued; the actual
-        // rebuild is still running, so poll until it settles.
-        if (result && result.post) self.setState({page: result.post})
-        // Publish queued; rebuild in background
-      }).then(function ()  {
-        self.setState({publishing: false, publishMessage: "Moved back to drafts. Static site rebuilt."})
-      }, function (err)  {
-        self.setState({publishing: false, publishError: (err && err.message) || String(err)})
-      });
-    },
-`;
-
-const PAGE_PUBLISH_PATCHED = `      // ${MARKER}_PAGEPUB
-      api.publish(this.state.page._id).then(function (result)  {
-        if (result && result.post) self.setState({page: result.post})
-        return api.waitForPublish(function (message) {
-          self.setState({publishMessage: message})
-        })
-      }).then(function ()  {
-        return api.page(self.state.page._id)
-      }).then(function (page)  {
-        self.setState({publishing: false, page: page, publishMessage: "\u5df2\u53d1\u5e03\uff0c\u524d\u53f0\u5df2\u66f4\u65b0\u3002"})
-      }, function (err)  {
-        self.setState({publishing: false, publishError: (err && err.message) || String(err)})
-      });
-    },
-
-    handleUnpublish: function () {
-      if (this.state.page.isDraft) return
-      var self = this
-      this.setState({publishing: true, publishError: null, publishMessage: null})
-      api.unpublish(this.state.page._id).then(function (result)  {
-        if (result && result.post) self.setState({page: result.post})
-        return api.waitForPublish(function (message) {
-          self.setState({publishMessage: message})
-        })
-      }).then(function ()  {
-        return api.page(self.state.page._id)
-      }).then(function (page)  {
-        self.setState({publishing: false, page: page, publishMessage: "\u5df2\u9000\u56de\u8349\u7a3f\uff0c\u524d\u53f0\u5df2\u66f4\u65b0\u3002"})
-      }, function (err)  {
-        self.setState({publishing: false, publishError: (err && err.message) || String(err)})
-      });
-    },
-`;
-
-// Expose rebuild() on the api object. waitForPublish and publishStatus already
-// exist; only the new endpoint needs wiring.
-const API_ANCHOR = `    publish: function(id)  {return post('/posts/' + id + '/publish');},`;
-const API_PATCHED = `    publish: function(id)  {return post('/posts/' + id + '/publish');},
-    rebuild: function()  {return post('/rebuild');}, // ${MARKER}_API
-    waitForPublish: waitForPublish,`;
+const REPAIRS = [
+  ['      api.publishStatus().then(function (job) {', '      pollOnce().then(function (job) {'],
+  ['    waitForPublish: waitForPublish,', '    waitForPublish: function(onProgress)  {return waitForPublish(this.publishStatus, onProgress);},'],
+  ['function waitForPublish(onProgress) {', 'function waitForPublish(pollOnce, onProgress) {']
+];
 
 // --------------------------------------------------------------------------- //
-function apply(text, anchor, replacement, label, problems, marker) {
-  // Idempotency: the marker is written into every inserted block, so its presence
-  // next to the anchor's own signature means this fix already landed.
+function apply(text, anchor, replacement, label, problems, marker, alreadyDone) {
   if (marker && text.includes(marker)) return text;
+  // Some blocks (the content handlers) have no marker of their own: they only
+  // add one call to a block inserted earlier, so idempotency is keyed on that
+  // call already following the anchor's signature.
+  if (alreadyDone && text.includes(alreadyDone)) return text;
   const count = text.split(anchor).length - 1;
   if (count === 0) {
     problems.push(`${label}: anchor not found`);
@@ -331,24 +344,40 @@ function main() {
     process.exit(1);
   }
   const raw = fs.readFileSync(BUNDLE, 'utf8');
-  // The bundle is a Windows-authored artifact and ships with CRLF endings. Work
-  // in LF internally so the anchors above can be written naturally, then restore
-  // whatever the file actually used.
+  // The bundle ships CRLF. Work in LF so the anchors read naturally, then
+  // restore whatever the file used.
   const eol = raw.includes('\r\n') ? '\r\n' : '\n';
   let text = raw.split('\r\n').join('\n');
   const original = text;
   const problems = [];
 
-  // Idempotency markers, one per inserted block.
-  const M = 'KITEPOP_EDITOR_PATCH';
-  text = apply(text, API_ANCHOR, API_PATCHED, 'api.rebuild export', problems, `${M}_API`);
-  text = apply(text, SAVE_ANCHOR, SAVE_PATCHED, 'save -> rebuild hook', problems, `${M}_SAVE`);
-  text = apply(text, CONTENT_ANCHOR, CONTENT_PATCHED, 'content change -> rebuild', problems, `${M}_CONTENT`);
-  text = apply(text, PUBLISH_ANCHOR, PUBLISH_PATCHED, 'post publish polling', problems, `${M}_POSTPUB`);
-  text = apply(text, PAGE_PUBLISH_ANCHOR, PAGE_PUBLISH_PATCHED, 'page publish polling', problems, `${M}_PAGEPUB`);
+  // Repair any broken intermediate shape left by the earlier revision of this
+  // patch before applying the anchors below.
+  for (const [bad, good] of REPAIRS) text = text.split(bad).join(good);
 
-  // Translation last: it is a plain find/replace and must not be able to
-  // confuse the structural anchors above.
+  const M = MARKER;
+
+  // api: rebuild() + bound waitForPublish + the poller helper.
+  text = apply(text, API_ANCHOR, API_PATCHED, 'api.rebuild export', problems, `${M}_API`);
+  text = apply(text, POLLER_ANCHOR, POLLER_HELPER, 'poller helper', problems, `${M}_POLLER`);
+
+  // editor save path, once per component
+  const postSave = saveAnchors('_post');
+  const pageSave = saveAnchors('_page');
+  text = apply(text, postSave.titleAnchor, postSave.helpers, 'post save -> rebuild', problems, `${M}_SAVE__POST`);
+  text = apply(text, postSave.contentAnchor, postSave.contentPatched, 'post content -> rebuild', problems, null,
+    postSave.contentDone);
+  text = apply(text, pageSave.titleAnchor, pageSave.helpers, 'page save -> rebuild', problems, `${M}_SAVE__PAGE`);
+  text = apply(text, pageSave.contentAnchor, pageSave.contentPatched, 'page content -> rebuild', problems, null,
+    pageSave.contentDone);
+
+  // publish/unpublish polling, once per component
+  const postPub = publishAnchors('post');
+  const pagePub = publishAnchors('page');
+  text = apply(text, postPub.upstream, postPub.patched, 'post publish polling', problems, `${M}_PUB_POST`);
+  text = apply(text, pagePub.upstream, pagePub.patched, 'page publish polling', problems, `${M}_PUB_PAGE`);
+
+  // Translation last: plain find/replace, must not disturb the anchors above.
   let translated = 0;
   for (const [from, to] of TRANSLATIONS) {
     const occurrences = text.split(JSON.stringify(from)).length - 1;
@@ -357,13 +386,22 @@ function main() {
     translated += occurrences;
   }
 
+  // Hard failures: a forbidden shape means a publish would throw at runtime.
+  for (const [shape, why] of FORBIDDEN) {
+    if (text.includes(shape)) problems.push(`forbidden shape: ${why}`);
+  }
+
   if (problems.length) {
-    console.error('patch-editor-bundle: ' + problems.length + ' problem(s):');
-    problems.forEach((p) => console.error('  - ' + p));
+    console.error(`patch-editor-bundle: ${problems.length} problem(s):`);
+    for (const p of problems) console.error(`  - ${p}`);
     if (CHECK) process.exit(1);
   }
   if (text === original) {
     console.log('patch-editor-bundle: already up to date');
+    return;
+  }
+  if (CHECK) {
+    console.log('patch-editor-bundle: --check requested, not writing');
     return;
   }
   if (DRY) {

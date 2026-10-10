@@ -4,13 +4,13 @@
 var About = React.createClass({displayName: 'About',
   render: function () {
     return React.DOM.div({className: "about"}, 
-      React.DOM.h1(null, "This is the Hexo Admin Plugin"), 
-      React.DOM.p(null, React.DOM.strong(null, "Goal: Provide an awesome admin experience for managing your blog.")), 
+      React.DOM.h1(null, "这里是博客后台"), 
+      React.DOM.p(null, React.DOM.strong(null, "目标：提供一个顺手的博客管理后台。")), 
       React.DOM.p(null, 
-        "Useful links:", 
+        "相关链接：", 
         React.DOM.ul(null, 
-          React.DOM.li(null, React.DOM.a({href: "http://hexo.io"}, "Hexo site")), 
-          React.DOM.li(null, React.DOM.a({href: "https://github.com/jaredly/hexo-admin-plugin"}, "Github page for this plugin"))
+          React.DOM.li(null, React.DOM.a({href: "http://hexo.io"}, "Hexo 官网")), 
+          React.DOM.li(null, React.DOM.a({href: "https://github.com/jaredly/hexo-admin-plugin"}, "本插件的 GitHub 页面"))
         )
       )
     )
@@ -46,51 +46,35 @@ module.exports = mod;
 var request = require('superagent')
 var Promise = require('es6-promise').Promise
 
-
-var REQUEST_TIMEOUT = 300000
-
-function apiErrorMessage(res) {
-  var msg = ''
-  if (res) {
-    if (res.body && typeof res.body === 'object') {
-      msg = res.body.error || res.body.message || ''
-    }
-    if (!msg && typeof res.text === 'string') msg = res.text
-    if (!msg && res.error && res.error.message) msg = res.error.message
-  }
-  msg = String(msg || '').replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim()
-  if (!msg) msg = 'Request failed' + (res && res.status ? ' with status ' + res.status : '')
-  if (msg.length > 400) msg = msg.slice(0, 400) + '...'
-  return msg
-}
 function _post(baseUrl, url, data) {
-  return new Promise(function (f, r)  {
+  return new Promise(function(f, r)  {
     var req = request.post(baseUrl + url)
     if (data) {
       req = req.send(data)
     }
-    req.timeout(REQUEST_TIMEOUT).end(function (err, res)  {
+    req.end(function(err, res)  {
       if (err) return r(err)
-      if (res && res.status >= 400) return r(new Error(apiErrorMessage(res)))
-      f(res ? res.body : null)
+      f(res.body)
     })
   })
 }
 
-// Poll /publish-status until the background rebuild settles, reporting elapsed
-// time as it goes so the editor is never silent during a ~30s publish.
+// KITEPOP_EDITOR_PATCH_POLLER: poll /publish-status until the background rebuild settles,
+// reporting elapsed time so the editor is never silent during a ~30s publish.
+// Takes the poller as an argument: this runs at module level, where the api
+// object returned by module.exports is not in scope.
 var PUBLISH_POLL_INTERVAL = 1000
 var PUBLISH_POLL_MAX_MS = 10 * 60 * 1000
 
-function waitForPublish(onProgress) {
+function waitForPublish(pollOnce, onProgress) {
   return new Promise(function (resolve, reject) {
     var started = Date.now()
     function tick() {
-      api.publishStatus().then(function (job) {
+      pollOnce().then(function (job) {
         job = job || {}
         if (job.running) {
           var secs = Math.round((job.elapsedMs || (Date.now() - started)) / 1000)
-          onProgress('Rebuilding the static site... ' + secs + 's')
+          onProgress('正在重建静态站... ' + secs + 's')
           setTimeout(tick, PUBLISH_POLL_INTERVAL)
           return
         }
@@ -98,14 +82,12 @@ function waitForPublish(onProgress) {
         if (job.state === 'failed') {
           return reject(new Error(job.message || 'Static site rebuild failed'))
         }
+        // 'idle' means the backend restarted mid-publish; do not poll forever.
         if (job.state === 'idle') {
-          // Status was reset (backend restarted mid-publish). Give up cleanly
-          // rather than polling forever.
           return reject(new Error('Publish status was lost; check the site and retry'))
         }
         setTimeout(tick, PUBLISH_POLL_INTERVAL)
       }, function (err) {
-        // A transient poll error (nginx hiccup) should not abort a long rebuild.
         if (Date.now() - started > PUBLISH_POLL_MAX_MS) {
           return reject(err || new Error('Timed out waiting for the publish job'))
         }
@@ -117,15 +99,14 @@ function waitForPublish(onProgress) {
 }
 
 function _get(baseUrl, url, params) {
-  return new Promise(function (f, r)  {
+  return new Promise(function(f, r)  {
     var req = request.get(baseUrl + url)
     if (params) {
       req = req.query(params)
     }
-    req.timeout(REQUEST_TIMEOUT).end(function (err, res)  {
+    req.end(function(err, res)  {
       if (err) return r(err)
-      if (res && res.status >= 400) return r(new Error(apiErrorMessage(res)))
-      f(res ? res.body : null)
+      f(res.body)
     })
   })
 }
@@ -152,8 +133,8 @@ module.exports = function (baseUrl) {
     remove: function(id)  {return post('/posts/' + id + '/remove');},
     publish: function(id)  {return post('/posts/' + id + '/publish');},
     rebuild: function()  {return post('/rebuild');}, // KITEPOP_EDITOR_PATCH_API
-    waitForPublish: waitForPublish,
-  publishStatus: function()  {return get('/publish-status');},
+    publishStatus: function()  {return get('/publish-status');},
+    waitForPublish: function(onProgress)  {return waitForPublish(this.publishStatus, onProgress);},
     unpublish: function(id)  {return post('/posts/' + id + '/unpublish');},
     renamePost: function(id, filename)  {return post('/posts/' + id + '/rename', {
       filename: filename
@@ -1105,11 +1086,11 @@ var Editor = React.createClass({displayName: 'Editor',
           tagsCategoriesAndMetadata: this.props.tagsCategoriesAndMetadata, 
           onChange: this.props.onChange}), 
         !this.props.isPage && (this.props.isDraft ?
-          React.DOM.button({className: "editor_publish", onClick: this.props.onPublish, disabled: this.props.publishing}, 
-            (this.props.publishing ? "发布中..." : "发布")
+          React.DOM.button({className: "editor_publish", onClick: this.props.onPublish}, 
+            "发布"
           ) :
-          React.DOM.button({className: "editor_unpublish", onClick: this.props.onUnpublish, disabled: this.props.publishing}, 
-            (this.props.publishing ? "取消发布中..." : "取消发布")
+          React.DOM.button({className: "editor_unpublish", onClick: this.props.onUnpublish}, 
+            "取消发布"
           )), 
           !this.props.isPage && (this.props.isDraft ?
           React.DOM.button({className: "editor_remove", title: "删除", 
@@ -1125,14 +1106,6 @@ var Editor = React.createClass({displayName: 'Editor',
                   onClick: this.onCheckGrammar}, 
             React.DOM.i({className: "fa fa-check-circle-o"})
           )
-      ), 
-      (this.props.publishing || this.props.publishError || this.props.publishMessage) &&
-      React.DOM.div({className: cx({
-        "editor_publish-status": true, 
-        "editor_publish-status--busy": !!this.props.publishing, 
-        "editor_publish-status--error": !!this.props.publishError
-      })}, 
-        this.props.publishError ? "Publish failed: " + this.props.publishError : (this.props.publishMessage || "")
       ), 
       React.DOM.div({className: "editor_main"}, 
         React.DOM.div({className: "editor_edit"}, 
@@ -1472,6 +1445,33 @@ var Page = React.createClass({displayName: 'Page',
       rendered: marked(text)
     })
     this._page({_content: text})
+    this._scheduleRebuild()
+  },
+
+  // KITEPOP_EDITOR_PATCH_SAVE__PAGE: after an edit settles, rebuild the static site
+  // so an edit to a published post is live immediately. Drafts are skipped --
+  // nothing about them is public yet, and the button still publishes them.
+  // Concurrent edits collapse into one rebuild by restarting the timer.
+  _scheduleRebuild: function () {
+    var item = this.state && (this.state.post || this.state.page)
+    if (!item || item.isDraft) return
+    var self = this
+    clearTimeout(this._rebuildTimer)
+    this._rebuildTimer = setTimeout(function () { self._runRebuild() }, 1500)
+  },
+
+  _runRebuild: function () {
+    var self = this
+    this.setState({publishing: true, publishError: null, publishMessage: '正在重建静态站...'})
+    api.rebuild().then(function () {
+      return api.waitForPublish(function (message) {
+        self.setState({publishMessage: message})
+      })
+    }).then(function () {
+      self.setState({publishing: false, publishMessage: '已保存，前台已更新。'})
+    }, function (err) {
+      self.setState({publishing: false, publishError: (err && err.message) || String(err)})
+    })
   },
 
   handleChangeTitle: function (title) {
@@ -1480,44 +1480,46 @@ var Page = React.createClass({displayName: 'Page',
     }
     this.setState({title: title});
     this._page({title: title})
+    this._scheduleRebuild()
   },
 
-    handlePublish: function () {
-      if (!this.state.page.isDraft) return
-      var self = this
-      this.setState({publishing: true, publishError: null, publishMessage: null})
-      // KITEPOP_EDITOR_PATCH_PAGEPUB
-      api.publish(this.state.page._id).then(function (result)  {
-        if (result && result.post) self.setState({page: result.post})
-        return api.waitForPublish(function (message) {
-          self.setState({publishMessage: message})
-        })
-      }).then(function ()  {
-        return api.page(self.state.page._id)
-      }).then(function (page)  {
-        self.setState({publishing: false, page: page, publishMessage: "已发布，前台已更新。"})
-      }, function (err)  {
-        self.setState({publishing: false, publishError: (err && err.message) || String(err)})
-      });
-    },
+  handlePublish: function () { // KITEPOP_EDITOR_PATCH_PUB_PAGE
+    if (!this.state.page.isDraft) return
+    var self = this
+    this.setState({publishing: true, publishError: null, publishMessage: null})
+    api.publish(this.state.page._id).then(function (result)  {
+      if (result && result.post) self.setState({page: result.post})
+      // The API returns as soon as the rebuild is queued; wait for it so a
+      // failure is surfaced and the toolbar is not updated prematurely.
+      return api.waitForPublish(function (message) {
+        self.setState({publishMessage: message})
+      })
+    }).then(function ()  {
+      return api.page(self.state.page._id)
+    }).then(function (item)  {
+      self.setState({publishing: false, page: item, publishMessage: "已发布，前台已更新。"})
+    }, function (err)  {
+      self.setState({publishing: false, publishError: (err && err.message) || String(err)})
+    });
+  },
 
-    handleUnpublish: function () {
-      if (this.state.page.isDraft) return
-      var self = this
-      this.setState({publishing: true, publishError: null, publishMessage: null})
-      api.unpublish(this.state.page._id).then(function (result)  {
-        if (result && result.post) self.setState({page: result.post})
-        return api.waitForPublish(function (message) {
-          self.setState({publishMessage: message})
-        })
-      }).then(function ()  {
-        return api.page(self.state.page._id)
-      }).then(function (page)  {
-        self.setState({publishing: false, page: page, publishMessage: "已退回草稿，前台已更新。"})
-      }, function (err)  {
-        self.setState({publishing: false, publishError: (err && err.message) || String(err)})
-      });
-    },
+  handleUnpublish: function () {
+    if (this.state.page.isDraft) return
+    var self = this
+    this.setState({publishing: true, publishError: null, publishMessage: null})
+    api.unpublish(this.state.page._id).then(function (result)  {
+      if (result && result.post) self.setState({page: result.post})
+      return api.waitForPublish(function (message) {
+        self.setState({publishMessage: message})
+      })
+    }).then(function ()  {
+      return api.page(self.state.page._id)
+    }).then(function (item)  {
+      self.setState({publishing: false, page: item, publishMessage: "已退回草稿，前台已更新。"})
+    }, function (err)  {
+      self.setState({publishing: false, publishError: (err && err.message) || String(err)})
+    });
+  },
 
   dataDidLoad: function (name, data) {
     if (name !== 'page') return
@@ -1552,9 +1554,6 @@ var Page = React.createClass({displayName: 'Page',
       onChangeTitle: this.handleChangeTitle,
       onPublish: this.handlePublish,
       onUnpublish: this.handleUnpublish,
-      publishing: this.state.publishing, 
-      publishError: this.state.publishError, 
-      publishMessage: this.state.publishMessage, 
       tagsCategoriesAndMetadata: this.state.tagsCategoriesAndMetadata,
       adminSettings: settings
     })
@@ -1747,22 +1746,19 @@ var Post = React.createClass({displayName: 'Post',
       rendered: marked(text)
     })
     this._post({_content: text})
-    this._scheduleRebuild() // KITEPOP_EDITOR_PATCH_CONTENT
+    this._scheduleRebuild()
   },
 
-  // KITEPOP_EDITOR_PATCH_SAVE: after an edit settles, rebuild the static site so a published
-  // post is live immediately. Drafts are skipped: nothing about them is public
-  // yet, and the button still publishes them. Concurrent edits collapse into one
-  // rebuild by (re)starting the debounce timer.
+  // KITEPOP_EDITOR_PATCH_SAVE__POST: after an edit settles, rebuild the static site
+  // so an edit to a published post is live immediately. Drafts are skipped --
+  // nothing about them is public yet, and the button still publishes them.
+  // Concurrent edits collapse into one rebuild by restarting the timer.
   _scheduleRebuild: function () {
-    if (!this.state || !this.state.post && !this.state.page) return
-    var item = this.state.post || this.state.page
+    var item = this.state && (this.state.post || this.state.page)
     if (!item || item.isDraft) return
     var self = this
     clearTimeout(this._rebuildTimer)
-    this._rebuildTimer = setTimeout(function () {
-      self._runRebuild()
-    }, 1500)
+    this._rebuildTimer = setTimeout(function () { self._runRebuild() }, 1500)
   },
 
   _runRebuild: function () {
@@ -1788,44 +1784,43 @@ var Post = React.createClass({displayName: 'Post',
     this._scheduleRebuild()
   },
 
-    handlePublish: function () {
-      if (!this.state.post.isDraft) return
-      var self = this
-      this.setState({publishing: true, publishError: null, publishMessage: null})
-      // KITEPOP_EDITOR_PATCH_POSTPUB: the API returns as soon as the rebuild is queued, so wait for
-      // the job before reporting anything, then adopt the post's new state --
-      // that is what flips the toolbar between Publish and Unpublish.
-      api.publish(this.state.post._id).then(function (result)  {
-        if (result && result.post) self.setState({post: result.post})
-        return api.waitForPublish(function (message) {
-          self.setState({publishMessage: message})
-        })
-      }).then(function ()  {
-        return api.post(self.state.post._id)
-      }).then(function (post)  {
-        self.setState({publishing: false, post: post, publishMessage: "已发布，前台已更新。"})
-      }, function (err)  {
-        self.setState({publishing: false, publishError: (err && err.message) || String(err)})
-      });
-    },
+  handlePublish: function () { // KITEPOP_EDITOR_PATCH_PUB_POST
+    if (!this.state.post.isDraft) return
+    var self = this
+    this.setState({publishing: true, publishError: null, publishMessage: null})
+    api.publish(this.state.post._id).then(function (result)  {
+      if (result && result.post) self.setState({post: result.post})
+      // The API returns as soon as the rebuild is queued; wait for it so a
+      // failure is surfaced and the toolbar is not updated prematurely.
+      return api.waitForPublish(function (message) {
+        self.setState({publishMessage: message})
+      })
+    }).then(function ()  {
+      return api.post(self.state.post._id)
+    }).then(function (item)  {
+      self.setState({publishing: false, post: item, publishMessage: "已发布，前台已更新。"})
+    }, function (err)  {
+      self.setState({publishing: false, publishError: (err && err.message) || String(err)})
+    });
+  },
 
-    handleUnpublish: function () {
-      if (this.state.post.isDraft) return
-      var self = this
-      this.setState({publishing: true, publishError: null, publishMessage: null})
-      api.unpublish(this.state.post._id).then(function (result)  {
-        if (result && result.post) self.setState({post: result.post})
-        return api.waitForPublish(function (message) {
-          self.setState({publishMessage: message})
-        })
-      }).then(function ()  {
-        return api.post(self.state.post._id)
-      }).then(function (post)  {
-        self.setState({publishing: false, post: post, publishMessage: "已退回草稿，前台已更新。"})
-      }, function (err)  {
-        self.setState({publishing: false, publishError: (err && err.message) || String(err)})
-      });
-    },
+  handleUnpublish: function () {
+    if (this.state.post.isDraft) return
+    var self = this
+    this.setState({publishing: true, publishError: null, publishMessage: null})
+    api.unpublish(this.state.post._id).then(function (result)  {
+      if (result && result.post) self.setState({post: result.post})
+      return api.waitForPublish(function (message) {
+        self.setState({publishMessage: message})
+      })
+    }).then(function ()  {
+      return api.post(self.state.post._id)
+    }).then(function (item)  {
+      self.setState({publishing: false, post: item, publishMessage: "已退回草稿，前台已更新。"})
+    }, function (err)  {
+      self.setState({publishing: false, publishError: (err && err.message) || String(err)})
+    });
+  },
 
   handleRemove: function () {
     var self = this;
@@ -1873,9 +1868,6 @@ var Post = React.createClass({displayName: 'Post',
       onChangeTitle: this.handleChangeTitle,
       onPublish: this.handlePublish,
       onUnpublish: this.handleUnpublish,
-      publishing: this.state.publishing, 
-      publishError: this.state.publishError, 
-      publishMessage: this.state.publishMessage, 
       onRemove: this.handleRemove,
       tagsCategoriesAndMetadata: this.state.tagsCategoriesAndMetadata,
       adminSettings: settings

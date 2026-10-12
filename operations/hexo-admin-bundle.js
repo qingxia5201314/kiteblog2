@@ -1432,6 +1432,7 @@ var Page = React.createClass({displayName: 'Page',
         page: data.page,
         updated: now
       })
+      this._scheduleRebuild() // KITEPOP_EDITOR_PATCH_CONFIG_PAGE
     }.bind(this))
   },
 
@@ -1733,6 +1734,7 @@ var Post = React.createClass({displayName: 'Post',
         state[name] = data.post[name]
       }
       this.setState(state)
+      this._scheduleRebuild() // KITEPOP_EDITOR_PATCH_CONFIG_POST
     }.bind(this))
   },
 

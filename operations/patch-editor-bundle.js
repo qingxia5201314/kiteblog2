@@ -26,6 +26,12 @@
 //    rebuild was never surfaced. The handlers now poll publish-status via
 //    api.waitForPublish, then re-read the post.
 //
+// 3. A front-matter edit rebuilt nothing either.
+//    The config dropper (tags / categories / date / author) saves through
+//    handleChange -- a third save path next to the title and the content. It
+//    rewrites the same markdown, so a post whose categories were changed kept
+//    rendering the old ones on the front end until an unrelated publish.
+//
 //   (An earlier revision of this patch also rewrote the poller to call
 //    `api.publishStatus()` from inside api's own module, where `api` is not in
 //    scope, so any publish threw "api is not defined". That shape is repaired
@@ -305,6 +311,46 @@ function publishAnchors(noun) {
   return { upstream, patched };
 }
 
+// 5. Front-matter edits (tags / categories / date / author) reach the server
+//    through handleChange, a third save path alongside the title and the content
+//    handlers. The config dropper writes the same markdown, so it needs the same
+//    rebuild: without it, re-categorising a published post keeps rendering the
+//    old categories on the front end until something else happens to publish.
+function configAnchors(noun) {
+  const getter = noun === 'post' ? 'post' : 'page';
+  const upstream = `  handleChange: function (update) {
+    var now = moment()
+    api.${getter}(this.props.params.${noun}Id, update).then(function(data)  {
+${noun === 'post' ? `      var state = {
+        tagsCategoriesAndMetadata: data.tagsCategoriesAndMetadata,
+        post: data.post,
+        updated: now,
+        author: data.post.author,
+      }
+      for(var i=0; i<data.tagsCategoriesAndMetadata.metadata.length; i++){
+        var name = data.tagsCategoriesAndMetadata.metadata[i]
+        state[name] = data.post[name]
+      }
+      this.setState(state)
+` : `      this.setState({
+        page: data.page,
+        updated: now
+      })
+`}    }.bind(this))
+  },
+`;
+
+  // Inserted inside the .bind(this) callback so `this` is still the component.
+  // _scheduleRebuild itself skips drafts, so this cannot publish anything on its
+  // own -- it only re-renders the static site for a post that is already live.
+  const patched = upstream.replace(
+    `${noun === 'post' ? '      this.setState(state)\n' : '      })\n'}`,
+    `${noun === 'post' ? '      this.setState(state)\n' : '      })\n'}      this._scheduleRebuild() // ${MARKER}_CONFIG_${noun.toUpperCase()}\n`
+  );
+
+  return { upstream, patched, done: patched };
+}
+
 // Shapes that must never survive: the poller reaching for `api` by name, which
 // is not in scope inside the api module.
 const FORBIDDEN = [
@@ -376,6 +422,12 @@ function main() {
   const pagePub = publishAnchors('page');
   text = apply(text, postPub.upstream, postPub.patched, 'post publish polling', problems, `${M}_PUB_POST`);
   text = apply(text, pagePub.upstream, pagePub.patched, 'page publish polling', problems, `${M}_PUB_PAGE`);
+
+  // front-matter save path, once per component
+  const postCfg = configAnchors('post');
+  const pageCfg = configAnchors('page');
+  text = apply(text, postCfg.upstream, postCfg.patched, 'post config -> rebuild', problems, null, postCfg.done);
+  text = apply(text, pageCfg.upstream, pageCfg.patched, 'page config -> rebuild', problems, null, pageCfg.done);
 
   // Translation last: plain find/replace, must not disturb the anchors above.
   let translated = 0;

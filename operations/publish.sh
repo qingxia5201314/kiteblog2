@@ -44,6 +44,10 @@ bash operations/patch-fontawesome.sh
 # Point the theme's pagination links at its own language strings; without this
 # they render Hexo's hardcoded "Prev"/"Next". See operations/patch-theme-i18n.sh.
 bash operations/patch-theme-i18n.sh
+# Keep the front-matter guard in place across redeploys; see
+# operations/patch-frontmatter-guard.cjs. No-op when already applied.
+node operations/patch-frontmatter-guard.cjs || printf 'publish.sh: front-matter guard patch failed
+' >&2
 printf 'public_dir: %s\nrender_drafts: false\n' "$OUT" > operations/release.yml
 node node_modules/hexo/bin/hexo generate --config _config.yml,operations/release.yml
 test -s "$OUT/index.html"

@@ -67,5 +67,33 @@ mirror('operations/hexo-admin-bundle.js', `${ADMIN}/www/bundle.js`, 'admin edito
 //    because install.cjs injects the theme stylesheet link into this file.
 mirror('operations/hexo-admin-www-index.html', `${ADMIN}/www/index.html`, 'admin www index');
 
-// 6. Theme styling: arknights stylesheet, fonts and background for the admin UI.
+// 6. www/autosave.js -- local draft safety net. Keeps the editor text in
+//    localStorage every couple of seconds and shouts when a save fails, so a
+//    broken backend can never silently eat what was typed (2026-10-26).
+mirror(
+  'operations/hexo-admin-autosave.js',
+  `${ADMIN}/www/autosave.js`,
+  'admin draft autosave (localStorage safety net)'
+);
+
+// 7. Stamp the bundle URL with its own content hash. The admin assets are served
+//    with a long Cache-Control (see the nginx /admin/ block), so a rebuilt
+//    bundle must change its URL or browsers keep executing the old one.
+{
+  const crypto = require('node:crypto');
+  const stamp = crypto
+    .createHash('sha256')
+    .update(fs.readFileSync(`${ADMIN}/www/bundle.js`))
+    .digest('hex')
+    .slice(0, 12);
+  const indexPath = `${ADMIN}/www/index.html`;
+  const html = fs.readFileSync(indexPath, 'utf8');
+  const stamped = html.replace(/bundle\.js\?v=[0-9a-f]+/g, `bundle.js?v=${stamp}`);
+  if (stamped !== html) {
+    fs.writeFileSync(indexPath, stamped);
+    console.log(`patch-admin: bundle.js stamped v=${stamp}`);
+  }
+}
+
+// 8. Theme styling: arknights stylesheet, fonts and background for the admin UI.
 require('./admin-style/install.cjs');
